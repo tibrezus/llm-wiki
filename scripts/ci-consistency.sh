@@ -41,7 +41,7 @@ generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE"
 GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' '.github/workflows/wiki-ci.yml')
 # Files to compare (copied from submodule)
 COPIED_FILES=('AGENTS.md' '.markdownlint.yaml' '.pre-commit-config.yaml')
-SUBMODULE_DIR='$INSTANCE_ROOT/.llm-wiki'
+SUBMODULE_DIR="$INSTANCE_ROOT/.llm-wiki"
 
 FAILED=0
 
