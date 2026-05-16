@@ -130,7 +130,15 @@ create_symlink() {
 create_symlink ".llm-wiki/AGENTS.md"            "$INSTANCE_ROOT/AGENTS.md"
 create_symlink ".llm-wiki/.markdownlint.yaml"    "$INSTANCE_ROOT/.markdownlint.yaml"
 create_symlink ".llm-wiki/.pre-commit-config.yaml" "$INSTANCE_ROOT/.pre-commit-config.yaml"
-create_symlink ".llm-wiki/.gitignore"             "$INSTANCE_ROOT/.gitignore"
+
+# .gitignore must be a real file (not symlinked) — git reads it before
+# resolving submodule symlinks, causing "too many levels of symbolic links"
+if [ ! -f "$INSTANCE_ROOT/.gitignore" ]; then
+    info "Generating .gitignore..."
+    echo "node_modules/" > "$INSTANCE_ROOT/.gitignore"
+elif ! grep -q 'node_modules' "$INSTANCE_ROOT/.gitignore" 2>/dev/null; then
+    echo "node_modules/" >> "$INSTANCE_ROOT/.gitignore"
+fi
 
 # --- Generate .remarkrc.mjs (local, references submodule schema) ---
 info "Generating .remarkrc.mjs..."
