@@ -1,0 +1,53 @@
+default: true
+MD003:
+  style: atx
+MD004:
+  style: dash
+MD009:
+  br_spaces: 2
+MD010: true
+MD012:
+  maximum: 1
+MD013: false
+MD025: false
+MD060: false
+MD022:
+  lines_above: 1
+  lines_below: 1
+MD023: true
+MD024:
+  siblings_only: true
+MD026:
+  punctuation: ".,;:!?"
+MD027: true
+MD028: true
+MD029:
+  style: ordered
+MD030: true
+MD031:
+  list_items: true
+MD032: true
+MD034: false
+MD035:
+  style: ---
+MD036: false
+MD037: true
+MD038: true
+MD039: true
+MD040: true
+MD041:
+  level: 1
+MD045: false
+MD046:
+  style: fenced
+MD047: true
+MD048:
+  style: backtick
+MD049: false
+MD050: true
+MD051: true
+MD053: true
+MD054: true
+MD055: true
+MD056: true
+MD058: true

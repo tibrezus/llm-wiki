@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "LLM Wiki — shared tooling module",
+  "devDependencies": {
+    "remark-cli": "^12.0.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-lint-frontmatter-schema": "^3.0.0"
+  },
+  "scripts": {
+    "lint": "markdownlint-cli2 '*.md' AGENTS.md README.md"
+  }
+}
