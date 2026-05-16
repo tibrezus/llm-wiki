@@ -5,6 +5,24 @@ set -euo pipefail
 # Source this file: source "$(dirname "$0")/generate.sh"
 # Each function takes a destination directory as the first argument.
 
+generate_agents_md() {
+    local dest="$1"
+    local submodule="$2"
+    cp "$submodule/AGENTS.md" "$dest/AGENTS.md"
+}
+
+generate_markdownlint() {
+    local dest="$1"
+    local submodule="$2"
+    cp "$submodule/.markdownlint.yaml" "$dest/.markdownlint.yaml"
+}
+
+generate_pre_commit() {
+    local dest="$1"
+    local submodule="$2"
+    cp "$submodule/.pre-commit-config.yaml" "$dest/.pre-commit-config.yaml"
+}
+
 generate_gitignore() {
     local dest="$1"
     echo "node_modules/" > "$dest/.gitignore"

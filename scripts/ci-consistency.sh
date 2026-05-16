@@ -37,10 +37,11 @@ generate_package_json "$TMPDIR" "$PROJECT_TITLE"
 generate_qmd_yml "$TMPDIR" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUIDE" "$QMD_REFERENCE"
 generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE"
 
-# Files to compare
-GENERATED_FILES=(".gitignore" ".remarkrc.mjs" "package.json" "qmd.yml" ".github/workflows/wiki-ci.yml")
-# Symlinks to verify
-SYMLINKS=("AGENTS.md:.llm-wiki/AGENTS.md" ".markdownlint.yaml:.llm-wiki/.markdownlint.yaml" ".pre-commit-config.yaml:.llm-wiki/.pre-commit-config.yaml")
+# Files to compare (generated from config)
+GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' '.github/workflows/wiki-ci.yml')
+# Files to compare (copied from submodule)
+COPIED_FILES=('AGENTS.md' '.markdownlint.yaml' '.pre-commit-config.yaml')
+SUBMODULE_DIR='$INSTANCE_ROOT/.llm-wiki'
 
 FAILED=0
 
@@ -63,27 +64,31 @@ for file in "${GENERATED_FILES[@]}"; do
     fi
 done
 
-echo ""
-echo "--- Symlinks ---"
-for entry in "${SYMLINKS[@]}"; do
-    link="${entry%%:*}"
-    target="${entry#*:}"
-    actual="$INSTANCE_ROOT/$link"
-    if [ ! -L "$actual" ]; then
-        if [ ! -e "$actual" ]; then
-            echo "  MISSING: $link"
-        else
-            echo "  NOT-SYMLINK: $link (expected symlink to $target)"
-        fi
+echo ''
+echo '--- Copied Files (must match submodule) ---'
+for file in "${COPIED_FILES[@]}"; do
+    expected="$SUBMODULE_DIR/$file"
+    actual="$INSTANCE_ROOT/$file"
+    if [ ! -f "$expected" ]; then
+        echo "  MISSING-IN-SUBMODULE: $file"
         FAILED=1
         continue
     fi
-    current_target=$(readlink "$actual")
-    if [ "$current_target" != "$target" ]; then
-        echo "  WRONG-TARGET: $link -> $current_target (expected $target)"
+    if [ ! -f "$actual" ]; then
+        echo "  MISSING: $file"
+        FAILED=1
+        continue
+    fi
+    if [ -L "$actual" ]; then
+        echo "  IS-SYMLINK: $file (expected regular file copy)"
+        FAILED=1
+        continue
+    fi
+    if ! diff -q "$expected" "$actual" > /dev/null 2>&1; then
+        echo "  DRIFT: $file differs from submodule version"
         FAILED=1
     else
-        echo "  OK: $link -> $target"
+        echo "  OK: $file"
     fi
 done
 

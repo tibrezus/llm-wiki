@@ -102,9 +102,9 @@ my-wiki/
 │   ├── llm-wiki.md                     # Pattern document
 │   ├── schemas/                        # Frontmatter + config schemas
 │   └── scripts/                        # Health check, CI pipelines, setup
-├── AGENTS.md → .llm-wiki/AGENTS.md     # Symlink (auto-updates with submodule)
-├── .markdownlint.yaml → .llm-wiki/...  # Symlink (auto-updates)
-├── .pre-commit-config.yaml → .llm-wiki/... # Symlink (auto-updates)
+├── AGENTS.md                     # Copied from .llm-wiki/AGENTS.md
+├── .markdownlint.yaml            # Copied from .llm-wiki/.markdownlint.yaml
+├── .pre-commit-config.yaml       # Copied from .llm-wiki/.pre-commit-config.yaml
 ├── .gitignore                          # Generated (git can't read symlinked gitignore)
 ├── .remarkrc.mjs                       # Generated (references .llm-wiki/schemas/)
 ├── wiki.config.yml                     # Project-specific configuration
@@ -133,7 +133,7 @@ git add .llm-wiki
 git commit -m "chore: update llm-wiki submodule"
 ```
 
-Symlinked files auto-update. If the module changes template formats, CI's consistency check will fail and prompt:
+Copied files (`AGENTS.md`, `.markdownlint.yaml`, `.pre-commit-config.yaml`) are refreshed by re-running bootstrap.
 
 ```
 Run 'bash .llm-wiki/scripts/bootstrap.sh' to regenerate drifted files.

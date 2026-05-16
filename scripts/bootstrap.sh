@@ -101,25 +101,11 @@ TODAY=$(date +%Y-%m-%d)
 info "Validating config..."
 python3 "$SCRIPT_DIR/validate-config.py" "$CONFIG_FILE" || error "Config validation failed."
 
-# --- Create symlinks to submodule configs ---
-info "Creating symlinks..."
-
-create_symlink() {
-    local target="$1"
-    local link="$2"
-    if [ -L "$link" ]; then
-        rm "$link"
-    elif [ -e "$link" ]; then
-        warn "$link already exists (not a symlink). Skipping."
-        return
-    fi
-    ln -s "$target" "$link"
-    info "  $link -> $target"
-}
-
-create_symlink ".llm-wiki/AGENTS.md"               "$INSTANCE_ROOT/AGENTS.md"
-create_symlink ".llm-wiki/.markdownlint.yaml"       "$INSTANCE_ROOT/.markdownlint.yaml"
-create_symlink ".llm-wiki/.pre-commit-config.yaml"  "$INSTANCE_ROOT/.pre-commit-config.yaml"
+# --- Copy shared config files from submodule ---
+info "Copying shared config files..."
+generate_agents_md "$INSTANCE_ROOT" "$INSTANCE_ROOT/.llm-wiki"
+generate_markdownlint "$INSTANCE_ROOT" "$INSTANCE_ROOT/.llm-wiki"
+generate_pre_commit "$INSTANCE_ROOT" "$INSTANCE_ROOT/.llm-wiki"
 
 # --- Generate files (always regenerated from config) ---
 info "Generating files..."
