@@ -10,16 +10,23 @@ This repository is used as a **git submodule** inside wiki instances. It provide
 |-----------|------|---------|
 | Wiki Schema | `AGENTS.md` | Page format, frontmatter rules, workflows, naming conventions |
 | Pattern Document | `llm-wiki.md` | The original LLM Wiki idea document |
-| Frontmatter Schema | `schemas/wiki-page.schema.yaml` | JSON Schema for wiki page YAML frontmatter |
+| Page Frontmatter Schema | `schemas/wiki-page.schema.yaml` | JSON Schema for wiki page YAML frontmatter |
+| Config Schema | `schemas/wiki-config.schema.yaml` | JSON Schema for `wiki.config.yml` |
 | Health Checker | `scripts/wiki-health.py` | Structural validation (orphans, bidirectional links, type/directory match, etc.) |
+| Config Validator | `scripts/validate-config.py` | Validates `wiki.config.yml` against schema |
+| Consistency Check | `scripts/ci-consistency.sh` | Detects drift between generated files and current config |
 | QMD Setup | `scripts/qmd-setup.sh` | Search engine setup reading from `wiki.config.yml` |
 | CI Lint Pipeline | `scripts/ci-lint.sh` | Full lint pipeline (markdownlint, mdlint-obsidian, remark, health check) |
 | CI Index Pipeline | `scripts/ci-index.sh` | QMD index build, embed, health verification |
 | Bootstrap Script | `scripts/bootstrap.sh` | Initialize a new wiki instance with interactive prompts |
+| Reusable Lint Workflow | `.github/workflows/lint.yml` | GitHub Actions reusable workflow for lint + consistency |
+| Reusable Index Workflow | `.github/workflows/index.yml` | GitHub Actions reusable workflow for QMD indexing |
+| Shared Config Reader | `scripts/lib/config.sh` | `read_config()`, `require_config()`, `require_submodule()` |
+| Shared Generators | `scripts/lib/generate.sh` | File generators (package.json, qmd.yml, CI workflow, etc.) |
+| Shared Tool Installer | `scripts/lib/install-tools.sh` | `install_all_lint_tools()`, `install_qmd()`, etc. |
 | Markdown Lint | `.markdownlint.yaml` | Shared markdown formatting rules |
 | Pre-Commit Hooks | `.pre-commit-config.yaml` | Automated validation on every commit |
-| Remark Config | `.remarkrc.mjs` | Frontmatter schema validation via remark |
-| npm Package | `package.json` | Dev dependencies for remark tools |
+| Tests | `tests/test_wiki_health.py` | Unit tests for wiki-health.py check functions |
 
 ## Quick Start
 
@@ -42,9 +49,47 @@ The bootstrap script will:
 - Create `wiki.config.yml` with project-specific configuration
 - Generate symlinks to shared lint configs
 - Generate `.remarkrc.mjs`, `package.json`, `qmd.yml`, `README.md`
+- Generate `.github/workflows/wiki-ci.yml` using the module's reusable workflows
 - Create `wiki/` directory structure (`entities/`, `concepts/`, `guides/`, `reference/`)
-- Generate `.github/workflows/wiki-ci.yml` for CI
 - Install npm dependencies and pre-commit hooks
+
+## Instance CI
+
+The generated CI workflow calls the module's reusable workflows:
+
+```yaml
+# Generated .github/workflows/wiki-ci.yml
+jobs:
+  lint:
+    uses: tibrezus/llm-wiki/.github/workflows/lint.yml@main
+    with:
+      runner: self-hosted
+      node-version: "20"
+
+  index:
+    uses: tibrezus/llm-wiki/.github/workflows/index.yml@main
+    needs: lint
+    with:
+      runner: self-hosted
+      node-version: "20"
+```
+
+The lint workflow runs:
+1. **Consistency check** — verifies generated files match current `wiki.config.yml` and symlinks are correct
+2. **Config validation** — validates `wiki.config.yml` against schema
+3. **markdownlint** — markdown formatting
+4. **mdlint-obsidian** — wikilinks, frontmatter, embeds
+5. **remark** — frontmatter schema validation
+6. **Unique filenames** — no duplicates across wiki/
+7. **Raw/ immutability** — raw/ files not modified in PRs
+8. **Wiki health check** — orphans, bidirectional links, type/directory match, stale pages
+
+The index workflow runs:
+1. **QMD setup** — collection + context from config
+2. **Index + embed** — build search index
+3. **Verify + search test** — confirm index health
+
+When the module's CI scripts are updated, all instances get the changes on their next CI run (the reusable workflow is fetched from `@main`). The consistency check catches instances that need to re-run bootstrap.
 
 ## Instance Structure
 
@@ -55,18 +100,18 @@ my-wiki/
 ├── .llm-wiki/                          # This module (git submodule)
 │   ├── AGENTS.md                       # Wiki schema
 │   ├── llm-wiki.md                     # Pattern document
-│   ├── schemas/wiki-page.schema.yaml   # Frontmatter schema
+│   ├── schemas/                        # Frontmatter + config schemas
 │   └── scripts/                        # Health check, CI pipelines, setup
-├── AGENTS.md → .llm-wiki/AGENTS.md     # Symlink
-├── .markdownlint.yaml → .llm-wiki/...  # Symlink
-├── .pre-commit-config.yaml → .llm-wiki/... # Symlink
-├── .gitignore → .llm-wiki/...          # Symlink
+├── AGENTS.md → .llm-wiki/AGENTS.md     # Symlink (auto-updates with submodule)
+├── .markdownlint.yaml → .llm-wiki/...  # Symlink (auto-updates)
+├── .pre-commit-config.yaml → .llm-wiki/... # Symlink (auto-updates)
+├── .gitignore                          # Generated (git can't read symlinked gitignore)
 ├── .remarkrc.mjs                       # Generated (references .llm-wiki/schemas/)
 ├── wiki.config.yml                     # Project-specific configuration
 ├── package.json                        # npm dev dependencies
 ├── qmd.yml                             # QMD search config
-├── .github/workflows/wiki-ci.yml       # CI (calls .llm-wiki/scripts/)
-├── wiki/                               # Wiki content (entity-owned)
+├── .github/workflows/wiki-ci.yml       # CI (calls module's reusable workflows)
+├── wiki/                               # Wiki content (instance-owned)
 │   ├── entities/
 │   ├── concepts/
 │   ├── guides/
@@ -79,7 +124,7 @@ my-wiki/
 
 ## Updating Shared Tooling
 
-When this module is updated (new lint rules, CI improvements, schema changes), all instances get the updates:
+When this module is updated, all instances get the changes:
 
 ```bash
 cd my-wiki
@@ -88,32 +133,36 @@ git add .llm-wiki
 git commit -m "chore: update llm-wiki submodule"
 ```
 
-Symlinked files (`AGENTS.md`, `.markdownlint.yaml`, `.pre-commit-config.yaml`, `.gitignore`) automatically pick up changes. Generated files (`.remarkrc.mjs`, `package.json`, `qmd.yml`, CI workflow) may need regeneration — re-run `bash .llm-wiki/scripts/bootstrap.sh` (it skips existing content files).
+Symlinked files auto-update. If the module changes template formats, CI's consistency check will fail and prompt:
+
+```
+Run 'bash .llm-wiki/scripts/bootstrap.sh' to regenerate drifted files.
+```
+
+Re-running bootstrap regenerates files from config while preserving content (`wiki/`, `raw/`, `index.md`, `log.md`).
 
 ## Project Configuration
 
-Each instance defines its project context in `wiki.config.yml`:
+Each instance defines its project context in `wiki.config.yml`, validated against `schemas/wiki-config.schema.yaml`:
 
 ```yaml
 project:
-  name: my-project
-  title: My Project
-  description: Description of what this wiki covers
-  url: https://example.com
+  name: my-project          # required, lowercase hyphen-separated
+  title: My Project         # required
+  description: ...          # required
+  url: https://...          # optional
 
 qmd:
-  global_context: "Rich description for search embeddings"
-  entity_context: "Context for entities/"
-  concept_context: "Context for concepts/"
-  guide_context: "Context for guides/"
-  reference_context: "Context for reference/"
+  global_context: "..."     # required, min 10 chars
+  entity_context: "..."     # optional
+  concept_context: "..."    # optional
+  guide_context: "..."      # optional
+  reference_context: "..."  # optional
 
 ci:
-  runner: self-hosted
-  node_version: "20"
+  runner: ubuntu-latest     # optional, default ubuntu-latest
+  node_version: "20"        # optional, default "20"
 ```
-
-LLM agents read this file at the start of every session to understand the project domain (see `AGENTS.md`).
 
 ## Validation Tools
 
@@ -121,18 +170,20 @@ LLM agents read this file at the start of every session to understand the projec
 |------|---------|---------|
 | markdownlint-cli2 | Markdown formatting | `npm install -g markdownlint-cli2` |
 | mdlint-obsidian | Wikilinks, frontmatter, embeds | `pip install mdlint-obsidian` |
-| remark-lint-frontmatter-schema | Frontmatter JSON Schema validation | `npm ci` (local devDependencies) |
+| remark-lint-frontmatter-schema | Frontmatter JSON Schema validation | `npm ci` |
 | qmd | Local search engine (BM25 + vector + reranking) | `npm install -g @tobilu/qmd` |
 
-Run all checks: `npm run check`
+Run all checks locally: `npm run check`
 
-## Extending
+## Development
 
-To improve the shared tooling across all wiki instances:
+```bash
+# Lint the module itself
+npm run lint
 
-1. Make changes in this repository
-2. Test with an existing instance (update submodule, run `npm run check`)
-3. Push to `main`
-4. Update the submodule reference in each instance
+# Run tests
+npm run test
 
-The wiki-health.py script, CI pipelines, lint rules, and frontmatter schema are all maintained here. Individual wiki instances own only their content (`wiki/`, `raw/`, `index.md`, `log.md`) and project configuration (`wiki.config.yml`).
+# Full check
+npm run check
+```

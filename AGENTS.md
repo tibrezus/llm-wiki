@@ -231,12 +231,14 @@ Runs on every commit: markdownlint → mdlint-obsidian → remark frontmatter sc
 
 ### CI Pipeline
 
-The instance CI workflow (`.github/workflows/wiki-ci.yml`) delegates to the submodule's CI scripts:
+The instance CI workflow (`.github/workflows/wiki-ci.yml`) calls the module's reusable GitHub Actions workflows:
 
-1. **lint** — `bash .llm-wiki/scripts/ci-lint.sh` — markdownlint → mdlint-obsidian → remark → unique filenames → raw/ immutability → wiki-health.py
-2. **index** — `bash .llm-wiki/scripts/ci-index.sh` — qmd setup → update → embed → status → search test
+1. **lint** — `uses: tibrezus/llm-wiki/.github/workflows/lint.yml@main` — consistency check → config validation → markdownlint → mdlint-obsidian → remark → unique filenames → raw/ immutability → wiki-health.py
+2. **index** — `uses: tibrezus/llm-wiki/.github/workflows/index.yml@main` — qmd setup → update → embed → status → search test
 
-CI runner and Node.js version are configured in `wiki.config.yml`.
+The reusable workflows live in the module repo and are always fetched from `@main`. This means updating the CI pipeline across all instances is done by updating the module — instances never need to edit their CI workflow. The consistency check (`ci-consistency.sh`) detects instances that need to re-run bootstrap to sync generated files.
+
+CI runner and Node.js version are configured in `wiki.config.yml` and passed as inputs to the reusable workflows.
 
 ## File: index.md
 

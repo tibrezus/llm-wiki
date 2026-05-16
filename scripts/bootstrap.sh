@@ -7,9 +7,9 @@ set -euo pipefail
 #   bash .llm-wiki/scripts/bootstrap.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SUBMODULE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-INSTANCE_ROOT="$(cd "$SUBMODULE_DIR/.." && pwd)"
-CONFIG_FILE="$INSTANCE_ROOT/wiki.config.yml"
+LIB_DIR="$SCRIPT_DIR/lib"
+source "$LIB_DIR/config.sh"
+source "$LIB_DIR/generate.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,9 +21,7 @@ warn()  { echo -e "${YELLOW}[bootstrap]${NC} $*"; }
 error() { echo -e "${RED}[bootstrap]${NC} $*" >&2; exit 1; }
 
 cd "$INSTANCE_ROOT"
-
-# --- Prerequisites ---
-[ -d ".llm-wiki" ] || error "Submodule not found at .llm-wiki/. Run: git submodule add https://github.com/tibrezus/llm-wiki.git .llm-wiki"
+require_submodule
 
 info "Bootstrapping LLM Wiki instance at $INSTANCE_ROOT"
 
@@ -35,7 +33,7 @@ else
     info "Configuring wiki instance..."
 
     read -rp "Project name (lowercase, hyphen-separated): " PROJECT_NAME
-    [[ "$PROJECT_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || error "Invalid project name. Use lowercase letters, digits, and hyphens."
+    [[ "$PROJECT_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] || error "Invalid project name."
 
     read -rp "Project title (human-readable) [$PROJECT_NAME]: " PROJECT_TITLE
     PROJECT_TITLE="${PROJECT_TITLE:-$PROJECT_NAME}"
@@ -85,31 +83,23 @@ EOF
     info "Created wiki.config.yml"
 fi
 
-# Read config values (allows re-running with existing config)
-read_config() {
-    python3 -c "
-import yaml, sys
-with open(sys.argv[1]) as f:
-    config = yaml.safe_load(f)
-keys = sys.argv[2].split('.')
-val = config
-for k in keys:
-    val = val[k]
-print(val)
-" "$CONFIG_FILE" "$1"
-}
-
+# --- Read config values (allows re-running) ---
 PROJECT_NAME=$(read_config project.name)
 PROJECT_TITLE=$(read_config project.title)
 PROJECT_DESCRIPTION=$(read_config project.description)
-PROJECT_URL=$(read_config project.url)
-CI_RUNNER=$(read_config ci.runner)
-CI_NODE=$(read_config ci.node_version)
+PROJECT_URL=$(read_config_default project.url "")
+CI_RUNNER=$(read_config_default ci.runner "ubuntu-latest")
+CI_NODE=$(read_config_default ci.node_version "20")
 QMD_GLOBAL=$(read_config qmd.global_context)
-QMD_ENTITY=$(read_config qmd.entity_context)
-QMD_CONCEPT=$(read_config qmd.concept_context)
-QMD_GUIDE=$(read_config qmd.guide_context)
-QMD_REFERENCE=$(read_config qmd.reference_context)
+QMD_ENTITY=$(read_config_default qmd.entity_context "")
+QMD_CONCEPT=$(read_config_default qmd.concept_context "")
+QMD_GUIDE=$(read_config_default qmd.guide_context "")
+QMD_REFERENCE=$(read_config_default qmd.reference_context "")
+TODAY=$(date +%Y-%m-%d)
+
+# --- Validate config ---
+info "Validating config..."
+python3 "$SCRIPT_DIR/validate-config.py" "$CONFIG_FILE" || error "Config validation failed."
 
 # --- Create symlinks to submodule configs ---
 info "Creating symlinks..."
@@ -120,86 +110,24 @@ create_symlink() {
     if [ -L "$link" ]; then
         rm "$link"
     elif [ -e "$link" ]; then
-        warn "$link already exists (not a symlink). Skipping. Remove it manually and re-run."
+        warn "$link already exists (not a symlink). Skipping."
         return
     fi
     ln -s "$target" "$link"
     info "  $link -> $target"
 }
 
-create_symlink ".llm-wiki/AGENTS.md"            "$INSTANCE_ROOT/AGENTS.md"
-create_symlink ".llm-wiki/.markdownlint.yaml"    "$INSTANCE_ROOT/.markdownlint.yaml"
-create_symlink ".llm-wiki/.pre-commit-config.yaml" "$INSTANCE_ROOT/.pre-commit-config.yaml"
+create_symlink ".llm-wiki/AGENTS.md"               "$INSTANCE_ROOT/AGENTS.md"
+create_symlink ".llm-wiki/.markdownlint.yaml"       "$INSTANCE_ROOT/.markdownlint.yaml"
+create_symlink ".llm-wiki/.pre-commit-config.yaml"  "$INSTANCE_ROOT/.pre-commit-config.yaml"
 
-# .gitignore must be a real file (not symlinked) — git reads it before
-# resolving submodule symlinks, causing "too many levels of symbolic links"
-if [ ! -f "$INSTANCE_ROOT/.gitignore" ]; then
-    info "Generating .gitignore..."
-    echo "node_modules/" > "$INSTANCE_ROOT/.gitignore"
-elif ! grep -q 'node_modules' "$INSTANCE_ROOT/.gitignore" 2>/dev/null; then
-    echo "node_modules/" >> "$INSTANCE_ROOT/.gitignore"
-fi
-
-# --- Generate .remarkrc.mjs (local, references submodule schema) ---
-info "Generating .remarkrc.mjs..."
-cat > "$INSTANCE_ROOT/.remarkrc.mjs" <<'REMARK_EOF'
-import remarkFrontmatter from "remark-frontmatter";
-import remarkLintFrontmatterSchema from "remark-lint-frontmatter-schema";
-
-const remarkConfig = {
-  plugins: [
-    remarkFrontmatter,
-    [
-      remarkLintFrontmatterSchema,
-      {
-        schemas: {
-          "./.llm-wiki/schemas/wiki-page.schema.yaml": ["./wiki/**/*.md"],
-        },
-      },
-    ],
-  ],
-};
-export default remarkConfig;
-REMARK_EOF
-
-# --- Generate package.json ---
-info "Generating package.json..."
-cat > "$INSTANCE_ROOT/package.json" <<PKGEOF
-{
-  "private": true,
-  "type": "module",
-  "description": "LLM Wiki for ${PROJECT_TITLE} — dev dependencies for frontmatter validation",
-  "devDependencies": {
-    "remark-cli": "^12.0.0",
-    "remark-frontmatter": "^5.0.0",
-    "remark-lint-frontmatter-schema": "^3.0.0"
-  },
-  "scripts": {
-    "lint": "markdownlint-cli2 'wiki/**/*.md' index.md log.md",
-    "lint:fix": "markdownlint-cli2 --fix 'wiki/**/*.md' index.md log.md",
-    "validate": "npx remark wiki/ --frail",
-    "health": "python3 .llm-wiki/scripts/wiki-health.py wiki/",
-    "check": "npm run lint && npm run validate && npm run health"
-  }
-}
-PKGEOF
-
-# --- Generate qmd.yml ---
-info "Generating qmd.yml..."
-cat > "$INSTANCE_ROOT/qmd.yml" <<QMDEOF
-collections:
-  wiki:
-    path: ./wiki
-    pattern: "**/*.md"
-
-context:
-  global: "${QMD_GLOBAL}"
-  paths:
-    qmd://wiki/entities: "${QMD_ENTITY}"
-    qmd://wiki/concepts: "${QMD_CONCEPT}"
-    qmd://wiki/guides: "${QMD_GUIDE}"
-    qmd://wiki/reference: "${QMD_REFERENCE}"
-QMDEOF
+# --- Generate files (always regenerated from config) ---
+info "Generating files..."
+generate_gitignore "$INSTANCE_ROOT"
+generate_remarkrc "$INSTANCE_ROOT"
+generate_package_json "$INSTANCE_ROOT" "$PROJECT_TITLE"
+generate_qmd_yml "$INSTANCE_ROOT" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUIDE" "$QMD_REFERENCE"
+generate_ci_workflow "$INSTANCE_ROOT" "$CI_RUNNER" "$CI_NODE"
 
 # --- Create wiki directory structure ---
 info "Creating wiki directories..."
@@ -210,191 +138,40 @@ mkdir -p "$INSTANCE_ROOT/wiki/reference"
 mkdir -p "$INSTANCE_ROOT/raw"
 touch "$INSTANCE_ROOT/raw/.gitkeep"
 
-# --- Create index.md ---
+# --- Create content files (only if they don't exist) ---
 if [ ! -f "$INSTANCE_ROOT/index.md" ]; then
     info "Creating index.md..."
-    cat > "$INSTANCE_ROOT/index.md" <<EOF
-# Wiki Index
-
-> Last updated: $(date +%Y-%m-%d)
-
-## Entities
-
-Specific technologies and products. Searched by name ("what is X?").
-
-| Page | Summary | Sources | Updated |
-|------|---------|---------|---------|
-
-## Concepts
-
-Architectural patterns and design principles. Searched by description ("how does X work?").
-
-| Page | Summary | Sources | Updated |
-|------|---------|---------|---------|
-
-## Guides
-
-Step-by-step procedures. Searched by intent ("how to X?").
-
-| Page | Summary | Sources | Updated |
-|------|---------|---------|---------|
-
-## Reference
-
-Catalogs, comparisons, and lookup tables. Searched by topic.
-
-| Page | Summary | Sources | Updated |
-|------|---------|---------|---------|
-EOF
+    generate_index "$INSTANCE_ROOT" "$PROJECT_TITLE" "$TODAY"
 else
     info "index.md already exists. Skipping."
 fi
 
-# --- Create log.md ---
 if [ ! -f "$INSTANCE_ROOT/log.md" ]; then
     info "Creating log.md..."
-    cat > "$INSTANCE_ROOT/log.md" <<EOF
-# Wiki Log
-
-Chronological append-only activity log for the ${PROJECT_TITLE} LLM Wiki.
-
-## [$(date +%Y-%m-%d)] create | Initial Wiki Bootstrap
-
-- **Operation**: create
-- **Pages affected**: None
-- **Summary**: Bootstrapped the LLM Wiki instance using the llm-wiki template submodule. Created wiki.config.yml, directory structure, and initial index.md/log.md.
-EOF
+    generate_log "$INSTANCE_ROOT" "$PROJECT_TITLE" "$TODAY"
 else
     info "log.md already exists. Skipping."
 fi
 
-# --- Generate README.md ---
 if [ ! -f "$INSTANCE_ROOT/README.md" ]; then
     info "Creating README.md..."
-    URL_LINE=""
-    if [ -n "$PROJECT_URL" ]; then
-        URL_LINE="[$PROJECT_TITLE]($PROJECT_URL) — "
-    fi
-    cat > "$INSTANCE_ROOT/README.md" <<EOF
-# ${PROJECT_NAME}
-
-A persistent, compounding knowledge base for the ${URL_LINE}${PROJECT_DESCRIPTION}.
-
-This wiki is maintained by LLM agents following the schema defined in \`AGENTS.md\`. It is designed to be browsed in [Obsidian](https://obsidian.md) for graph view and wikilink navigation, and searched with [qmd](https://github.com/tobi/qmd) for hybrid BM25/vector search with LLM re-ranking.
-
-## Structure
-
-\`\`\`text
-${PROJECT_NAME}/
-├── .llm-wiki/          # Shared tooling (git submodule)
-├── wiki.config.yml     # Project-specific configuration
-├── qmd.yml             # QMD search engine config
-├── index.md            # Content-oriented catalog of all wiki pages
-├── log.md              # Chronological append-only activity log
-├── raw/                # Immutable source documents (never modify)
-└── wiki/               # Wiki pages organized by entity type
-    ├── entities/       # Specific technologies and products
-    ├── concepts/       # Architectural patterns and design principles
-    ├── guides/         # Step-by-step procedures
-    └── reference/      # Catalogs and lookups
-\`\`\`
-
-## Setup
-
-\`\`\`bash
-# Install global validation tools
-npm install -g markdownlint-cli2 @tobilu/qmd
-pip install mdlint-obsidian
-
-# Install local remark dependencies
-npm ci
-
-# Set up pre-commit hooks
-pre-commit install
-
-# Set up qmd search index
-bash .llm-wiki/scripts/qmd-setup.sh
-\`\`\`
-
-## Validation
-
-\`\`\`bash
-# Run all checks
-npm run check
-
-# Individual tools
-npm run lint          # markdownlint formatting
-npm run validate      # frontmatter schema validation
-npm run health        # structural wiki health check
-\`\`\`
-
-See \`.llm-wiki/AGENTS.md\` for the full schema and \`llm-wiki.md\` for the original pattern document.
-EOF
+    generate_readme "$INSTANCE_ROOT" "$PROJECT_NAME" "$PROJECT_TITLE" "$PROJECT_DESCRIPTION" "$PROJECT_URL"
 else
     info "README.md already exists. Skipping."
 fi
-
-# --- Generate CI workflow ---
-info "Generating .github/workflows/wiki-ci.yml..."
-mkdir -p "$INSTANCE_ROOT/.github/workflows"
-cat > "$INSTANCE_ROOT/.github/workflows/wiki-ci.yml" <<WFEOF
-name: Wiki CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  lint:
-    name: Lint and Validate
-    runs-on: ${CI_RUNNER}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "${CI_NODE}"
-
-      - name: Run lint pipeline
-        run: bash .llm-wiki/scripts/ci-lint.sh
-
-  index:
-    name: QMD Index Health
-    runs-on: ${CI_RUNNER}
-    needs: lint
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "${CI_NODE}"
-
-      - name: Run index pipeline
-        run: bash .llm-wiki/scripts/ci-index.sh
-WFEOF
 
 # --- Install dependencies ---
 info "Installing npm dependencies..."
 if command -v npm &>/dev/null; then
     npm ci 2>/dev/null || npm install
 else
-    warn "npm not found. Run 'npm ci' manually after installing Node.js."
+    warn "npm not found. Run 'npm ci' manually."
 fi
 
 # --- Install pre-commit hooks ---
 if command -v pre-commit &>/dev/null; then
     info "Installing pre-commit hooks..."
-    pre-commit install 2>/dev/null || warn "pre-commit install failed. Run manually."
+    pre-commit install 2>/dev/null || warn "pre-commit install failed."
 else
     warn "pre-commit not found. Install with: pip install pre-commit"
 fi
@@ -415,6 +192,6 @@ info "    2. Drop source documents into raw/"
 info "    3. Start your LLM agent and begin ingesting"
 info "    4. Run 'npm run check' to validate"
 info ""
-info "  To update the shared tooling:"
+info "  To update shared tooling:"
 info "    cd .llm-wiki && git pull origin main && cd .."
 info ""

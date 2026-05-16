@@ -1,57 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Lint pipeline — installs tools and runs all validators.
+# Called by the reusable lint workflow and usable locally.
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INSTANCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+source "$LIB_DIR/config.sh"
+source "$LIB_DIR/install-tools.sh"
 
-echo "=== LLM Wiki CI Lint Pipeline ==="
-echo "Instance root: $INSTANCE_ROOT"
-
+require_config
 cd "$INSTANCE_ROOT"
 
-echo "--- System Tools ---"
-node --version
-python3 --version
-npm --version
+echo "=== LLM Wiki Lint Pipeline ==="
+echo "Instance root: $INSTANCE_ROOT"
 
-echo "--- Bootstrap pip ---"
-curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages
+install_all_lint_tools
+configure_path
 
-echo "--- Configure npm global bin ---"
-echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
-
-echo "--- Install markdownlint-cli2 ---"
-npm install -g markdownlint-cli2
-
-echo "--- Markdown Lint ---"
+echo ""
+echo "--- markdownlint ---"
 markdownlint-cli2 "wiki/**/*.md" "index.md" "log.md"
 
-echo "--- Install mdlint-obsidian ---"
-python3 -m pip install --break-system-packages mdlint-obsidian
-
-echo "--- Add pip user bin to PATH ---"
-echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-echo "--- Obsidian Markdown Validation ---"
+echo ""
+echo "--- mdlint-obsidian ---"
 mdlint wiki/ --vault wiki/ --severity error --format json
 
-echo "--- Install remark tools ---"
-npm ci
-
-echo "--- Frontmatter Schema Validation ---"
+echo ""
+echo "--- remark frontmatter schema ---"
 npx remark wiki/ --frail
 
-echo "--- Install wiki-health dependencies ---"
-python3 -m pip install --break-system-packages pyyaml
-
-echo "--- Unique Filenames Check ---"
+echo ""
+echo "--- unique filenames ---"
 dups=$(find wiki/ -name "*.md" -exec basename {} \; | sort | uniq -d)
 if [ -n "$dups" ]; then
     echo "::error::Duplicate filenames in wiki/: $dups"
     exit 1
 fi
+echo "OK"
 
-echo "--- Raw/ Immutability Check ---"
+echo ""
+echo "--- raw/ immutability ---"
 if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
     changed=$(git diff --name-only origin/main...HEAD -- raw/)
     if [ -n "$changed" ]; then
@@ -59,8 +48,10 @@ if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
         exit 1
     fi
 fi
+echo "OK"
 
-echo "--- Wiki Health Check ---"
+echo ""
+echo "--- wiki health check ---"
 python3 .llm-wiki/scripts/wiki-health.py wiki/
 
 echo ""

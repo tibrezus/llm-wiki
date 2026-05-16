@@ -1,0 +1,52 @@
+type: object
+required:
+  - project
+  - qmd
+properties:
+  project:
+    type: object
+    required:
+      - name
+      - title
+      - description
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]*$"
+      title:
+        type: string
+        minLength: 1
+      description:
+        type: string
+        minLength: 1
+      url:
+        type: string
+    additionalProperties: false
+  qmd:
+    type: object
+    required:
+      - global_context
+    properties:
+      global_context:
+        type: string
+        minLength: 10
+      entity_context:
+        type: string
+      concept_context:
+        type: string
+      guide_context:
+        type: string
+      reference_context:
+        type: string
+    additionalProperties: false
+  ci:
+    type: object
+    properties:
+      runner:
+        type: string
+        default: ubuntu-latest
+      node_version:
+        type: string
+        default: "20"
+    additionalProperties: false
+additionalProperties: false

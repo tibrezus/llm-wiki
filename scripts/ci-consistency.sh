@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Consistency check: verify generated files match what the current module
+# would produce from wiki.config.yml. Run in CI to catch drift.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+source "$LIB_DIR/config.sh"
+source "$LIB_DIR/generate.sh"
+
+require_config
+
+echo "=== Consistency Check ==="
+
+# Read all config values
+PROJECT_TITLE=$(read_config project.title)
+CI_RUNNER=$(read_config_default ci.runner "ubuntu-latest")
+CI_NODE=$(read_config_default ci.node_version "20")
+QMD_GLOBAL=$(read_config qmd.global_context)
+QMD_ENTITY=$(read_config_default qmd.entity_context "")
+QMD_CONCEPT=$(read_config_default qmd.concept_context "")
+QMD_GUIDE=$(read_config_default qmd.guide_context "")
+QMD_REFERENCE=$(read_config_default qmd.reference_context "")
+PROJECT_NAME=$(read_config project.name)
+PROJECT_DESCRIPTION=$(read_config project.description)
+PROJECT_URL=$(read_config_default project.url "")
+
+# Create temp dir for expected files
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+# Generate expected files
+generate_gitignore "$TMPDIR"
+generate_remarkrc "$TMPDIR"
+generate_package_json "$TMPDIR" "$PROJECT_TITLE"
+generate_qmd_yml "$TMPDIR" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUIDE" "$QMD_REFERENCE"
+generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE"
+
+# Files to compare
+GENERATED_FILES=(".gitignore" ".remarkrc.mjs" "package.json" "qmd.yml" ".github/workflows/wiki-ci.yml")
+# Symlinks to verify
+SYMLINKS=("AGENTS.md:.llm-wiki/AGENTS.md" ".markdownlint.yaml:.llm-wiki/.markdownlint.yaml" ".pre-commit-config.yaml:.llm-wiki/.pre-commit-config.yaml")
+
+FAILED=0
+
+echo ""
+echo "--- Generated Files ---"
+for file in "${GENERATED_FILES[@]}"; do
+    expected="$TMPDIR/$file"
+    actual="$INSTANCE_ROOT/$file"
+    if [ ! -f "$actual" ]; then
+        echo "  MISSING: $file"
+        FAILED=1
+        continue
+    fi
+    if ! diff -q "$expected" "$actual" > /dev/null 2>&1; then
+        echo "  DRIFT: $file differs from expected"
+        diff --unified=3 "$expected" "$actual" | head -20
+        FAILED=1
+    else
+        echo "  OK: $file"
+    fi
+done
+
+echo ""
+echo "--- Symlinks ---"
+for entry in "${SYMLINKS[@]}"; do
+    link="${entry%%:*}"
+    target="${entry#*:}"
+    actual="$INSTANCE_ROOT/$link"
+    if [ ! -L "$actual" ]; then
+        if [ ! -e "$actual" ]; then
+            echo "  MISSING: $link"
+        else
+            echo "  NOT-SYMLINK: $link (expected symlink to $target)"
+        fi
+        FAILED=1
+        continue
+    fi
+    current_target=$(readlink "$actual")
+    if [ "$current_target" != "$target" ]; then
+        echo "  WRONG-TARGET: $link -> $current_target (expected $target)"
+        FAILED=1
+    else
+        echo "  OK: $link -> $target"
+    fi
+done
+
+echo ""
+echo "--- Directory Structure ---"
+for dir in wiki/entities wiki/concepts wiki/guides wiki/reference raw; do
+    if [ -d "$INSTANCE_ROOT/$dir" ]; then
+        echo "  OK: $dir/"
+    else
+        echo "  MISSING: $dir/"
+        FAILED=1
+    fi
+done
+
+echo ""
+echo "--- Config Validation ---"
+if python3 "$SCRIPT_DIR/validate-config.py" "$CONFIG_FILE" > /dev/null 2>&1; then
+    echo "  OK: wiki.config.yml"
+else
+    echo "  INVALID: wiki.config.yml"
+    python3 "$SCRIPT_DIR/validate-config.py" "$CONFIG_FILE"
+    FAILED=1
+fi
+
+echo ""
+if [ "$FAILED" -eq 1 ]; then
+    echo "=== Consistency Check FAILED ==="
+    echo "Run 'bash .llm-wiki/scripts/bootstrap.sh' to regenerate drifted files."
+    exit 1
+else
+    echo "=== Consistency Check PASSED ==="
+    exit 0
+fi

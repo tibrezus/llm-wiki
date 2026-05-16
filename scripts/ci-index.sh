@@ -1,42 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# QMD index pipeline — installs QMD, indexes wiki, verifies search.
+# Called by the reusable index workflow and usable locally.
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INSTANCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+source "$LIB_DIR/config.sh"
+source "$LIB_DIR/install-tools.sh"
 
-echo "=== LLM Wiki CI Index Pipeline ==="
-echo "Instance root: $INSTANCE_ROOT"
-
+require_config
 cd "$INSTANCE_ROOT"
 
-echo "--- System Tools ---"
-node --version
-npm --version
+echo "=== LLM Wiki Index Pipeline ==="
 
-echo "--- Configure npm global bin ---"
-echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+install_qmd
+configure_path
 
-echo "--- Install QMD ---"
-npm install -g @tobilu/qmd
-
-echo "--- Install Bun ---"
-curl -fsSL https://bun.sh/install | bash
-echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
-
-echo "--- QMD Setup ---"
+echo ""
 bash .llm-wiki/scripts/qmd-setup.sh
 
-echo "--- Re-index Wiki ---"
+echo ""
+echo "--- re-index ---"
 qmd update
 
-echo "--- Generate Embeddings ---"
+echo ""
+echo "--- embed ---"
 qmd embed
 
-echo "--- Verify Index ---"
+echo ""
+echo "--- verify ---"
 qmd status
 
-echo "--- Test Search ---"
-result=$(qmd search "test query" --json -n 1)
+echo ""
+echo "--- search test ---"
+result=$(qmd search "test query" --json -n 1 2>/dev/null || echo "")
 if [ "$result" = "[]" ] || [ -z "$result" ]; then
     echo "::error::QMD search returned no results for test query"
     exit 1

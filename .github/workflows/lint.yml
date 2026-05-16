@@ -1,0 +1,40 @@
+name: Lint
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: GitHub Actions runner label
+        type: string
+        default: ubuntu-latest
+      node-version:
+        description: Node.js version
+        type: string
+        default: "20"
+
+jobs:
+  lint:
+    name: Lint, Validate, and Consistency
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Verify system tools
+        run: |
+          node --version
+          python3 --version
+          npm --version
+
+      - name: Consistency check
+        run: bash .llm-wiki/scripts/ci-consistency.sh
+
+      - name: Run lint pipeline
+        run: bash .llm-wiki/scripts/ci-lint.sh
