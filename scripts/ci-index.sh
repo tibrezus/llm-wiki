@@ -17,6 +17,9 @@ echo "=== LLM Wiki Index Pipeline ==="
 install_qmd
 configure_path
 
+# Ensure locally-installed bins are on PATH for this shell
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+
 echo ""
 bash .llm-wiki/scripts/qmd-setup.sh
 
