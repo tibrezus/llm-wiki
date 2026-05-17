@@ -28,4 +28,6 @@ jobs:
           node-version: ${{ inputs.node-version }}
 
       - name: Run index pipeline
-        run: bash .llm-wiki/scripts/ci-index.sh
+        run: |
+          python3 -m pip install --break-system-packages pyyaml 2>/dev/null || pip3 install pyyaml 2>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages && python3 -m pip install --break-system-packages pyyaml)
+          bash .llm-wiki/scripts/ci-index.sh
