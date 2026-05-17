@@ -18,6 +18,9 @@ echo "Instance root: $INSTANCE_ROOT"
 install_all_lint_tools
 configure_path
 
+# Ensure pip user bin is on PATH for this shell too
+export PATH="$HOME/.local/bin:$PATH"
+
 echo ""
 echo "--- markdownlint ---"
 markdownlint-cli2 "wiki/**/*.md" "index.md" "log.md"
