@@ -34,7 +34,13 @@ jobs:
           npm --version
 
       - name: Install consistency check dependencies
-        run: python3 -m pip install --break-system-packages pyyaml 2>/dev/null || pip3 install pyyaml 2>/dev/null || true
+        run: |
+          python3 --version
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages
+            python3 -m pip install --break-system-packages pyyaml
+          fi
+          python3 -c 'import yaml; print("pyyaml OK")'
 
       - name: Consistency check
         run: bash .llm-wiki/scripts/ci-consistency.sh
