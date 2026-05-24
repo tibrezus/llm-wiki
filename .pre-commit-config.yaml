@@ -40,7 +40,7 @@ repos:
         always_run: true
 
       - id: wiki-health
-        name: wiki health check (errors only)
+        name: wiki health check (errors + warnings)
         entry: bash .llm-wiki/scripts/pre-commit-check.sh
         language: system
         types: [markdown]
