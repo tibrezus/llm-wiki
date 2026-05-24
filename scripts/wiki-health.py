@@ -336,10 +336,13 @@ def main():
     parser.add_argument("wiki_root", help="Path to wiki/ directory")
     parser.add_argument("--errors-only", action="store_true",
                         help="Run only error-level checks (skip warnings)")
+    parser.add_argument("--strict", action="store_true",
+                        help="Treat warnings as errors (exit 1 on any warning)")
     args = parser.parse_args()
 
     wiki_root = args.wiki_root
     errors_only = args.errors_only
+    strict = args.strict
     if not os.path.isdir(wiki_root):
         print(f"Error: {wiki_root} is not a directory")
         sys.exit(1)
@@ -392,6 +395,9 @@ def main():
 
     if all_errors:
         print("\nHealth check FAILED — fix errors before committing.")
+        sys.exit(1)
+    elif strict and all_warnings:
+        print(f"\nHealth check FAILED — {len(all_warnings)} warning(s) in strict mode.")
         sys.exit(1)
     else:
         print("\nHealth check PASSED.")
