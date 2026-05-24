@@ -141,6 +141,139 @@ def check_bidirectional(pages: dict[str, WikiPage]) -> list[str]:
     return warnings
 
 
+def check_no_body_h1(pages: dict[str, WikiPage]) -> list[str]:
+    """Check that no page uses # headings after the title line."""
+    errors = []
+    for page in pages.values():
+        lines = page.content.split("\n")
+        in_frontmatter = False
+        frontmatter_done = False
+        h1_count = 0
+        for line in lines:
+            if line.strip() == "---" and not frontmatter_done:
+                if not in_frontmatter:
+                    in_frontmatter = True
+                    continue
+                else:
+                    in_frontmatter = False
+                    frontmatter_done = True
+                    continue
+            if in_frontmatter:
+                continue
+            if line.startswith("# "):
+                h1_count += 1
+                if h1_count > 1:
+                    errors.append(f"BODY-H1: {page.path} has multiple # headings (reserved for title)")
+                    break
+    return errors
+
+
+def check_summary_paragraph(pages: dict[str, WikiPage]) -> list[str]:
+    """Check that the first content after # Title is a paragraph, not a section."""
+    errors = []
+    for page in pages.values():
+        lines = page.content.split("\n")
+        in_frontmatter = False
+        frontmatter_done = False
+        found_title = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped == "---" and not frontmatter_done:
+                if not in_frontmatter:
+                    in_frontmatter = True
+                    continue
+                else:
+                    in_frontmatter = False
+                    frontmatter_done = True
+                    continue
+            if in_frontmatter:
+                continue
+            if not found_title and stripped.startswith("# "):
+                found_title = True
+                continue
+            if found_title and stripped == "":
+                continue
+            if found_title:
+                if stripped.startswith("## "):
+                    errors.append(f"NO-SUMMARY: {page.path} jumps from title to ## section without a summary paragraph")
+                break
+    return errors
+
+
+def check_sources_exist(pages: dict[str, WikiPage], wiki_root: str) -> list[str]:
+    """Check that all source references in frontmatter point to files in raw/."""
+    errors = []
+    raw_dir = Path(wiki_root).parent / "raw"
+    for page in pages.values():
+        fm = page.frontmatter
+        if not fm:
+            continue
+        sources = fm.get("sources", [])
+        if not sources:
+            continue
+        for source in sources:
+            if not (raw_dir / source).exists():
+                errors.append(f"MISSING-SOURCE: {page.path} references '{source}' but it does not exist in raw/")
+    return errors
+
+
+def check_markdown_links(pages: dict[str, WikiPage]) -> list[str]:
+    """Check that internal references use [[wikilinks]] not markdown links."""
+    errors = []
+    for page in pages.values():
+        lines = page.content.split("\n")
+        in_frontmatter = False
+        frontmatter_done = False
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped == "---" and not frontmatter_done:
+                if not in_frontmatter:
+                    in_frontmatter = True
+                    continue
+                else:
+                    in_frontmatter = False
+                    frontmatter_done = True
+                    continue
+            if in_frontmatter:
+                continue
+            # Match [text](path) where path is not external
+            for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*?)\)', line):
+                errors.append(f"MD-LINK: {page.path}:{i} uses markdown link [{m.group(1)}]({m.group(2)}) instead of [[wikilink]]")
+    return errors
+
+
+def check_log_format(wiki_root: str) -> list[str]:
+    """Check that log.md entries follow the required format."""
+    errors = []
+    log_path = Path(wiki_root).parent / "log.md"
+    if not log_path.exists():
+        errors.append("MISSING-LOG: log.md does not exist")
+        return errors
+    content = log_path.read_text(encoding="utf-8")
+    entries = re.findall(r"^## \[(\d{4}-\d{2}-\d{2})\] (.+)$", content, re.MULTILINE)
+    if not entries:
+        errors.append("LOG-FORMAT: log.md has no valid entries (expected format: ## [YYYY-MM-DD] operation | Title)")
+    for date_str, title in entries:
+        if " | " not in title:
+            errors.append(f"LOG-FORMAT: log.md entry '[{date_str}] {title}' missing operation type (expected: '## [{date_str}] operation | Title')")
+    return errors
+
+
+def check_see_also_links_valid(pages: dict[str, WikiPage]) -> list[str]:
+    """Check that all wikilinks in See Also sections resolve to existing pages."""
+    errors = []
+    all_names = set(pages.keys())
+    for page in pages.values():
+        if "## See Also" not in page.content:
+            continue
+        see_also = page.content.split("## See Also")[1]
+        links = extract_wikilinks(see_also)
+        for link in links:
+            if link not in all_names:
+                errors.append(f"BROKEN-SEE-ALSO: {page.path} See Also links to [[{link}]] which does not exist")
+    return errors
+
+
 def check_stale(pages: dict[str, WikiPage], days: int = 90) -> list[str]:
     warnings = []
     cutoff = datetime.now() - timedelta(days=days)
@@ -203,6 +336,12 @@ def main():
         ("Unique filenames", check_unique_names, True),
         ("Type/directory match", check_type_directory_match, True),
         ("Broken wikilinks", check_broken_wikilinks, True),
+        ("See Also link validity", check_see_also_links_valid, True),
+        ("No body H1 headings", check_no_body_h1, True),
+        ("Summary paragraph", check_summary_paragraph, True),
+        ("Sources exist in raw/", lambda p: check_sources_exist(p, wiki_root), True),
+        ("No markdown links", check_markdown_links, True),
+        ("Log format", lambda p: check_log_format(wiki_root), True),
         ("Orphan pages", check_orphans, False),
         ("See Also sections", check_see_also, True),
         ("Bidirectional links", check_bidirectional, False),

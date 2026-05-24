@@ -12,8 +12,13 @@ install_node_tools() {
 
 install_python_tools() {
     echo "::group::Install Python tools"
-    python3 -m pip install --break-system-packages pyyaml mdlint-obsidian 2>/dev/null \
-        || pip3 install pyyaml mdlint-obsidian 2>/dev/null
+    # Ensure pyyaml is available (needed by config.sh read_config)
+    if ! python3 -c 'import yaml' 2>/dev/null; then
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages 2>/dev/null
+        python3 -m pip install --break-system-packages pyyaml 2>/dev/null
+    fi
+    python3 -m pip install --break-system-packages mdlint-obsidian 2>/dev/null \
+        || pip3 install mdlint-obsidian 2>/dev/null
     echo "::endgroup::"
 }
 

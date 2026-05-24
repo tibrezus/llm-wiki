@@ -29,5 +29,8 @@ jobs:
 
       - name: Run index pipeline
         run: |
-          python3 -m pip install --break-system-packages pyyaml 2>/dev/null || pip3 install pyyaml 2>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages && python3 -m pip install --break-system-packages pyyaml)
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages
+            python3 -m pip install --break-system-packages pyyaml
+          fi
           bash .llm-wiki/scripts/ci-index.sh

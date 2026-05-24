@@ -33,9 +33,8 @@ jobs:
           python3 --version
           npm --version
 
-      - name: Install consistency check dependencies
+      - name: Install pyyaml
         run: |
-          python3 --version
           if ! python3 -c 'import yaml' 2>/dev/null; then
             curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages
             python3 -m pip install --break-system-packages pyyaml
