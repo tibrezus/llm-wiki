@@ -148,9 +148,11 @@ def check_no_body_h1(pages: dict[str, WikiPage]) -> list[str]:
         lines = page.content.split("\n")
         in_frontmatter = False
         frontmatter_done = False
+        in_code_fence = False
         h1_count = 0
         for line in lines:
-            if line.strip() == "---" and not frontmatter_done:
+            stripped = line.strip()
+            if stripped == "---" and not frontmatter_done:
                 if not in_frontmatter:
                     in_frontmatter = True
                     continue
@@ -160,7 +162,13 @@ def check_no_body_h1(pages: dict[str, WikiPage]) -> list[str]:
                     continue
             if in_frontmatter:
                 continue
-            if line.startswith("# "):
+            # Track fenced code blocks
+            if stripped.startswith("```"):
+                in_code_fence = not in_code_fence
+                continue
+            if in_code_fence:
+                continue
+            if stripped.startswith("# "):
                 h1_count += 1
                 if h1_count > 1:
                     errors.append(f"BODY-H1: {page.path} has multiple # headings (reserved for title)")
@@ -224,6 +232,7 @@ def check_markdown_links(pages: dict[str, WikiPage]) -> list[str]:
         lines = page.content.split("\n")
         in_frontmatter = False
         frontmatter_done = False
+        in_code_fence = False
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if stripped == "---" and not frontmatter_done:
@@ -235,6 +244,11 @@ def check_markdown_links(pages: dict[str, WikiPage]) -> list[str]:
                     frontmatter_done = True
                     continue
             if in_frontmatter:
+                continue
+            if stripped.startswith("```"):
+                in_code_fence = not in_code_fence
+                continue
+            if in_code_fence:
                 continue
             # Match [text](path) where path is not external
             for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*?)\)', line):
