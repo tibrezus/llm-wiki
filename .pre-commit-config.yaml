@@ -49,14 +49,14 @@ repos:
 
       - id: protect-raw
         name: prevent modifications to raw/
-        entry: bash -c 'git diff --cached --name-only raw/ | grep -q . && echo "ERROR: never modify files in raw/" && exit 1 || exit 0'
+        entry: bash .llm-wiki/scripts/pre-commit-raw-protect.sh
         language: system
         pass_filenames: false
         always_run: true
 
       - id: unique-filenames
         name: enforce unique filenames across wiki/
-        entry: bash -c 'dups=$(find wiki/ -name "*.md" -exec basename {} \; | sort | uniq -d); if [ -n "$dups" ]; then echo "ERROR: duplicate filenames in wiki/: $dups"; exit 1; fi'
+        entry: bash .llm-wiki/scripts/pre-commit-unique-filenames.sh
         language: system
         pass_filenames: false
         always_run: true
