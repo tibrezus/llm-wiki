@@ -331,11 +331,15 @@ def check_index(pages: dict[str, WikiPage], wiki_root: str) -> list[str]:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: wiki-health.py <wiki-root>")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser(description="Wiki health check")
+    parser.add_argument("wiki_root", help="Path to wiki/ directory")
+    parser.add_argument("--errors-only", action="store_true",
+                        help="Run only error-level checks (skip warnings)")
+    args = parser.parse_args()
 
-    wiki_root = sys.argv[1]
+    wiki_root = args.wiki_root
+    errors_only = args.errors_only
     if not os.path.isdir(wiki_root):
         print(f"Error: {wiki_root} is not a directory")
         sys.exit(1)
@@ -344,7 +348,8 @@ def main():
     all_errors = []
     all_warnings = []
 
-    print(f"=== Wiki Health Check ({len(pages)} pages) ===\n")
+    mode = "errors only" if errors_only else "full"
+    print(f"=== Wiki Health Check ({len(pages)} pages, {mode}) ===\n")
 
     checks = [
         ("Unique filenames", check_unique_names, True),
@@ -364,6 +369,8 @@ def main():
     ]
 
     for name, check_fn, is_error in checks:
+        if errors_only and not is_error:
+            continue
         results = check_fn(pages)
         if results:
             for r in results:
@@ -380,10 +387,11 @@ def main():
 
     print(f"\n=== Summary ===")
     print(f"Errors: {len(all_errors)}")
-    print(f"Warnings: {len(all_warnings)}")
+    if not errors_only:
+        print(f"Warnings: {len(all_warnings)}")
 
     if all_errors:
-        print("\nHealth check FAILED — fix errors before merging.")
+        print("\nHealth check FAILED — fix errors before committing.")
         sys.exit(1)
     else:
         print("\nHealth check PASSED.")

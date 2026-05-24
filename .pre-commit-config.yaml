@@ -39,6 +39,14 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: wiki-health
+        name: wiki health check (errors only)
+        entry: bash .llm-wiki/scripts/pre-commit-check.sh
+        language: system
+        types: [markdown]
+        pass_filenames: false
+        always_run: true
+
       - id: protect-raw
         name: prevent modifications to raw/
         entry: bash -c 'git diff --cached --name-only raw/ | grep -q . && echo "ERROR: never modify files in raw/" && exit 1 || exit 0'
