@@ -155,11 +155,15 @@ else
 fi
 
 # --- Install pre-commit hooks ---
+if ! command -v pre-commit &>/dev/null; then
+    info "Installing pre-commit..."
+    pip3 install pre-commit 2>/dev/null || python3 -m pip install --break-system-packages pre-commit 2>/dev/null || warn "Could not install pre-commit. Run: pip install pre-commit"
+fi
 if command -v pre-commit &>/dev/null; then
     info "Installing pre-commit hooks..."
     pre-commit install 2>/dev/null || warn "pre-commit install failed."
 else
-    warn "pre-commit not found. Install with: pip install pre-commit"
+    warn "pre-commit not available. Install manually: pip install pre-commit && pre-commit install"
 fi
 
 # --- Summary ---
