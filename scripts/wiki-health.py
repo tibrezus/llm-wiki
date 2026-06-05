@@ -41,7 +41,18 @@ def parse_frontmatter(content: str) -> dict | None:
 
 
 def extract_wikilinks(content: str) -> list[str]:
-    return re.findall(r"\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]", content)
+    # Strip fenced code blocks before extracting — `[[...]]` inside `bash`,
+    # `sh`, or any code block is regex/syntax, not a wikilink.
+    stripped = []
+    in_fence = False
+    for line in content.splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            stripped.append(line)
+    text = "\n".join(stripped)
+    return re.findall(r"\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]", text)
 
 
 def parse_all(wiki_root: str) -> dict[str, WikiPage]:
