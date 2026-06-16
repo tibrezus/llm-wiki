@@ -49,9 +49,11 @@ configure_path() {
     npm_bin="$(npm prefix -g 2>/dev/null)/bin"
     if [ -d "$npm_bin" ]; then
         echo "$npm_bin" >> "${GITHUB_PATH:-/dev/null}"
+        export PATH="$npm_bin:$PATH"
     fi
     local pip_bin="$HOME/.local/bin"
     if [ -d "$pip_bin" ]; then
         echo "$pip_bin" >> "${GITHUB_PATH:-/dev/null}"
+        export PATH="$pip_bin:$PATH"
     fi
 }
