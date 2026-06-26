@@ -1,0 +1,274 @@
+---
+name: llm-wiki
+description: "Operate on an LLM Wiki knowledge base — a persistent, compounding artifact maintained by LLM agents. Supports two documentation workflows: Generic (Mermaid diagrams, raw-source inputs) and Architecture/C4D2 (D2 diagrams, code-graph-driven C4 model). Commands: read, update, create, prune, list, arch-sync. Use when the user asks to look something up, update wiki content, add/remove pages, sync architecture diagrams from a code graph, or get an overview of the knowledge base."
+---
+
+# LLM Wiki Skill
+
+An LLM Wiki is a **persistent, compounding knowledge base** — not a RAG index.
+Knowledge is compiled once and kept current by LLM agents. The human curates
+sources and asks questions; the agent does the writing, cross-referencing,
+filing, and bookkeeping.
+
+## Before You Start
+
+1. **Read `wiki.config.yml`** at the repo root — defines the project domain,
+   QMD search contexts, and whether any architecture projects are declared.
+2. **Read `AGENTS.md`** (copied from `.llm-wiki/instance/AGENTS.md`) for the full
+   schema: page format, frontmatter rules, entity types, naming conventions,
+   cross-referencing rules, and the two documentation workflows.
+
+Never skip these files. They define the wiki's structure.
+
+## Repository Layout
+
+```text
+.llm-wiki/          # Shared tooling (git submodule)
+wiki.config.yml     # Project configuration
+AGENTS.md           # Wiki schema (copied from .llm-wiki/instance/AGENTS.md)
+index.md            # Catalog of all pages
+log.md              # Append-only activity log
+raw/                # Immutable source documents
+  └── arch/         # CI-generated code graphs (architecture workflow)
+wiki/
+├── entities/       # "What is X?" — technologies, products
+├── concepts/       # "How does X work?" — patterns, principles
+├── guides/         # "How to X?" — step-by-step procedures
+└── reference/      # "Compare/Lookup X" — catalogs, comparisons
+```
+
+## Two Documentation Workflows
+
+The wiki supports distinct workflows. Each has its own inputs, diagram tool,
+and CI validation. A project can use one or both.
+
+### Workflow 1: Generic Documentation
+
+For documenting anything that is NOT driven by a code graph — entities,
+concepts, guides, reference material. Written from raw sources (articles,
+READMEs, conversations, design docs).
+
+- **Inputs**: raw sources in `raw/` (anything the human curates).
+- **Diagrams**: **Mermaid only**. Renders natively on GitHub and Obsidian.
+  Many types: `sequenceDiagram`, `flowchart TD/LR` + `subgraph`,
+  `stateDiagram-v2`, `erDiagram`, `gantt`, etc. Pick the type that matches the
+  content.
+- **CI validation**: wiki CI validates markdown + mermaid syntax.
+
+### Workflow 2: Architecture Documentation (C4D2)
+
+For documenting a project's architecture from its code, driven by a
+deterministic SCIP code graph. Only for projects with a graph in `raw/arch/`.
+
+- **Inputs**: `raw/arch/<project>.scip` (binary, never load whole) +
+  `<project>.map.txt` (ranked, token-budgeted rollup — this is what you read).
+- **Diagrams**: **D2 exclusively**. D2's inter-diagram dependencies (nested
+  shapes, multi-board linking) make the C4 zoom hierarchy work
+  (Context → Container → Component → Code as nested/linked boards). No Mermaid
+  for C4 diagrams.
+- **CI validation**: CI validates every D2 block compiles.
+
+**C4 level assignment is the LLM's job** — the core value-add. The graph gives
+ranked symbols + reference edges; you decide which clusters are Context vs
+Container vs Component vs Code.
+
+---
+
+## Commands
+
+### `wiki read <topic>`
+
+Search the wiki for information about a topic.
+
+1. Search with qmd (if available):
+
+   ```bash
+   qmd query "topic" --json -n 10
+   ```
+
+2. Search with grep:
+
+   ```bash
+   grep -rl "topic" wiki/ index.md
+   ```
+
+3. Read every matching page **in full**.
+4. Synthesize an answer with citations.
+5. If substantial and not yet a page, offer to create one.
+
+### `wiki update`
+
+Ingest new information into the wiki (Generic workflow).
+
+1. **Understand the change.** Read relevant existing pages.
+2. **Save source** to `raw/` (e.g. `2026-06-26-topic-name.md`). **Never modify
+   `raw/`** after saving.
+3. **Update existing pages**: add information, add `[[wikilinks]]`, update
+   `sources: []` and `updated:` in frontmatter.
+4. **Create new pages** for uncovered topics (correct entity-type directory).
+5. **Add diagrams** as ` ```mermaid ` blocks where they help. Pick the type that
+   matches the content (sequence for time-ordered, flowchart+subgraph for
+   containment, etc.).
+6. **Update `index.md`** and **append to `log.md`**.
+7. **Validate**: `npm run check`.
+
+### `wiki create <topic>`
+
+Create a new wiki page.
+
+1. Classify the entity type:
+   - Specific technology/product → **entity**
+   - Cross-cutting idea/pattern → **concept**
+   - Step-by-step procedure → **guide**
+   - Catalog/comparison/lookup → **reference**
+2. Check for overlap — search `index.md` and `qmd query`.
+3. Write the page:
+
+   ```markdown
+   ---
+   title: Descriptive Specific Title
+   type: entity|concept|guide|reference
+   created: YYYY-MM-DD
+   updated: YYYY-MM-DD
+   sources: []
+   tags: [type-tag, tag2, tag3]
+   ---
+
+   # Descriptive Specific Title
+
+   Dense keyword-rich summary (2-3 sentences).
+
+   ## Section Title
+
+   Body with [[wikilinks]].
+
+   ## See Also
+
+   - [[related-1]] — description
+   - [[related-2]] — description
+   ```
+
+4. Add `[[wikilink]]` references from existing pages to the new page.
+5. Ensure bidirectional links.
+6. Update `index.md`, append to `log.md`, validate with `npm run check`.
+
+### `wiki arch-sync <project>`
+
+Sync architecture diagrams from an updated code graph (Architecture/C4D2
+workflow). Run when `raw/arch/<project>.scip` or `.map.txt` has changed.
+
+1. **Detect change**: `git log -p -- raw/arch/<project>.map.txt`.
+2. **Read the map**: orient using `<project>.map.txt` (ranked clusters).
+   Drill the `.scip` for specific neighborhoods if needed:
+
+   ```bash
+   scip navigate <project>.scip <symbol>
+   ```
+
+   Never load the `.scip` binary into context whole.
+3. **Re-derive C4 levels**: assign symbols/clusters to Context / Container /
+   Component / Code. **This is your value-add** — use ranking (high PageRank →
+   prominent in the diagram) to decide what is load-bearing.
+4. **Update D2 figures** in the pages that explain each topic. Use D2's nested
+   shapes for C4 containment and cross-board links for the zoom hierarchy.
+   The pattern (in a `d2` fenced block):
+
+   - Top-level shapes = Context level (systems, actors)
+   - Nested shapes inside a system = Container level (deployables)
+   - Nested shapes inside a container = Component level (modules)
+   - Nested shapes inside a component = Code level (top-ranked symbols)
+
+   D2 only — never Mermaid for C4 diagrams.
+5. **Update `sources:`** with `raw/arch/<project>.scip`.
+6. **Update `index.md`** and **append to `log.md`** with operation `arch-sync`.
+7. **Validate**: `npm run check` (CI will also validate D2 compiles).
+
+### `wiki prune <topic>`
+
+Remove a page. **Never without explicit instruction.**
+
+1. Find the page: `find wiki/ -name "topic.md"`.
+2. Find all inbound links: `grep -rl "[[topic]]" wiki/`.
+3. Remove/update wikilinks from referencing pages.
+4. Delete the file.
+5. Remove from `index.md`, append to `log.md`, validate.
+
+### `wiki list`
+
+Summarize the wiki contents.
+
+1. Read `index.md` for the catalog.
+2. Count pages by type:
+
+   ```bash
+   find wiki/entities -name "*.md" | wc -l
+   find wiki/concepts -name "*.md" | wc -l
+   find wiki/guides -name "*.md" | wc -l
+   find wiki/reference -name "*.md" | wc -l
+   ```
+
+3. Check for architecture projects:
+
+   ```bash
+   ls raw/arch/*.scip 2>/dev/null
+   ```
+
+4. Run health check:
+
+   ```bash
+   python3 .llm-wiki/scripts/wiki-health.py wiki/
+   ```
+
+5. Present: page counts, architecture projects, recent updates, warnings.
+
+---
+
+## Diagram Rules by Workflow
+
+| Workflow | Tool | When | CI checks |
+|----------|------|------|-----------|
+| Generic Documentation | **Mermaid only** | documenting from raw sources | markdown + mermaid validity |
+| Architecture (C4D2) | **D2 only** | documenting from a code graph | D2 compiles |
+
+Never mix: no D2 in generic docs, no Mermaid for C4 architecture diagrams.
+
+### Mermaid type guide (Generic)
+
+| Content | Type |
+|---------|------|
+| Time-ordered triggers | `sequenceDiagram` |
+| Nested topology / containment | `flowchart TD` + `subgraph` |
+| Linear pipeline / fan-out | `flowchart LR` |
+| Dependency chain | `flowchart TD` |
+| Decision branches | `flowchart TD` with `{rhombus}` |
+| State transitions | `stateDiagram-v2` |
+| Schema / relationships | `erDiagram`, `classDiagram` |
+| Timeline / phases | `gantt`, `journey` |
+
+Use ` ```text ` for file trees, procedures, pseudo-code, templates — not diagrams.
+
+### D2 C4 guide (Architecture)
+
+| C4 Level | Scope | D2 technique |
+|----------|-------|-------------|
+| Context | whole system + actors | top-level shapes; link to Container boards |
+| Container | one project | nested inside Context; link to Component boards |
+| Component | one module | nested inside Container; link to Code boards |
+| Code | few files | top-ranked symbols from `<project>.map.txt` |
+
+---
+
+## Validation Checklist
+
+Before committing any wiki change:
+
+- [ ] `npm run check` passes (markdownlint + remark + wiki-health)
+- [ ] New pages: all 6 frontmatter fields present, correct type directory
+- [ ] Tags: 2-7 items, first matches type, all lowercase
+- [ ] `## See Also` with ≥2 links
+- [ ] No duplicate filenames across `wiki/`
+- [ ] `index.md` updated, `log.md` appended
+- [ ] Bidirectional links maintained
+- [ ] No `#` body headings, no inline HTML, no markdown links for internal refs
+- [ ] Generic workflow pages: Mermaid only (no D2)
+- [ ] Architecture pages: D2 only (no Mermaid); D2 compiles

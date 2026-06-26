@@ -21,22 +21,33 @@ all instances. Work carefully and think about backwards compatibility.
 | `instance/AGENTS.md` | Module, at `instance/AGENTS.md` | The **wiki schema** — copied verbatim into each instance's root `AGENTS.md` by `bootstrap.sh` |
 
 `instance/AGENTS.md` is titled **"LLM Wiki Schema"** and defines page format,
-frontmatter rules, entity types, ingest/query/lint workflows, naming and
-cross-referencing conventions. It is the authoritative contract that every
-instance follows. **When editing wiki content inside an instance, follow that
-instance's root `AGENTS.md` (= this module's `instance/AGENTS.md`).**
+frontmatter rules, entity types, and two documentation workflows:
+
+- **Workflow 1 — Generic Documentation**: documents anything from raw sources
+  (articles, READMEs, conversations). Diagrams in **Mermaid only**. Wiki CI
+  validates markdown + mermaid validity.
+- **Workflow 2 — Architecture Documentation (C4D2)**: documents a project's
+  code structure from a deterministic SCIP graph. Diagrams in **D2 only**
+  (D2's inter-diagram dependencies make the C4 zoom hierarchy work). CI
+  validates D2 validity.
+
+Both share the same page format, entity types, naming, and cross-referencing.
+It is the authoritative contract every instance follows. **When editing wiki
+content inside an instance, follow that instance's root `AGENTS.md` (= this
+module's `instance/AGENTS.md`).**
 
 ## What this module provides
 
 ```text
 AGENTS.md                       # THIS FILE — module maintenance guide
 instance/AGENTS.md              # The wiki schema (copied into instances)
-llm-wiki.md                     # Original pattern document (reference)
+llm-wiki.md                     # Founding pattern document (reference)
 README.md                       # Module overview + quick start
 .markdownlint.yaml              # Shared markdown rules (copied into instances)
 .pre-commit-config.yaml         # Pre-commit hooks (copied into instances)
 .remarkrc.mjs                   # remark config (module self-lint)
 package.json                    # npm: lint, test, check
+skill/SKILL.md                  # Agent skill for wiki operations
 schemas/
   wiki-page.schema.yaml         # JSON Schema for wiki page frontmatter
   wiki-config.schema.yaml       # JSON Schema for wiki.config.yml
