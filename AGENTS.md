@@ -1,271 +1,198 @@
 ---
-title: LLM Wiki Schema
+title: LLM Wiki — Shared Tooling Module
 ---
 
-# AGENTS.md — LLM Wiki Schema
+# AGENTS.md — llm-wiki (Shared Tooling Module)
 
-This document is the authoritative schema for any LLM Wiki instance. Any LLM agent working in a wiki repository must follow these conventions exactly. The wiki is a persistent, compounding knowledge base whose domain is defined by the project.
+> **You are in the `tibrezus/llm-wiki` module repository — NOT a wiki instance.**
+> This repo will never contain `wiki/`, `raw/`, `wiki.config.yml`, `index.md`, or
+> `log.md`. Do not look for them and do not follow instance workflows here.
 
-## Project Context
+This repository is the **shared tooling module** used by every LLM Wiki instance
+as a git submodule (`.llm-wiki/`). It supplies the wiki schema, lint config, CI
+pipelines, and the bootstrap generator. Everything you change here propagates to
+all instances. Work carefully and think about backwards compatibility.
 
-Each wiki instance defines its project-specific context in `wiki.config.yml` at the repository root. LLM agents **must read `wiki.config.yml`** at the start of every session to understand:
+## Two different AGENTS.md files — do not confuse them
 
-- What domain the wiki covers (project name, description, URL)
-- How to optimize search embeddings (QMD context strings per directory)
-- CI configuration (runner type, Node.js version)
+| File | Where it lives | Role |
+|------|---------------|------|
+| **This file** (`AGENTS.md`) | Module root | How to maintain the **module** (scripts, schemas, CI, bootstrap) |
+| `instance/AGENTS.md` | Module, at `instance/AGENTS.md` | The **wiki schema** — copied verbatim into each instance's root `AGENTS.md` by `bootstrap.sh` |
 
-The config file format:
+`instance/AGENTS.md` is titled **"LLM Wiki Schema"** and defines page format,
+frontmatter rules, entity types, ingest/query/lint workflows, naming and
+cross-referencing conventions. It is the authoritative contract that every
+instance follows. **When editing wiki content inside an instance, follow that
+instance's root `AGENTS.md` (= this module's `instance/AGENTS.md`).**
 
-```yaml
-project:
-  name: project-name          # Lowercase, hyphen-separated
-  title: Project Name         # Human-readable
-  description: One sentence   # Project description
-  url: https://...            # Optional
-
-qmd:
-  global_context: "..."       # Rich description for search embeddings
-  entity_context: "..."       # Context for wiki/entities/
-  concept_context: "..."      # Context for wiki/concepts/
-  guide_context: "..."        # Context for wiki/guides/
-  reference_context: "..."    # Context for wiki/reference/
-
-ci:
-  runner: self-hosted         # GitHub Actions runner label
-  node_version: "20"          # Node.js version
-```
-
-## Core Principle
-
-This wiki is NOT a RAG index. It is a **persistent, compounding artifact**. Knowledge is compiled once and kept current — not re-derived on every query. When you add a source, you integrate it across the wiki. When you answer a question, good answers become new pages. Cross-references are maintained, contradictions are flagged, synthesis reflects everything ingested so far.
-
-The human curates sources and asks questions. You do all the writing, cross-referencing, filing, and bookkeeping.
-
-## Repository Structure
+## What this module provides
 
 ```text
-<instance-root>/
-├── .llm-wiki/                    # Git submodule (shared tooling)
-│   ├── AGENTS.md                 # THIS FILE — wiki schema
-│   ├── llm-wiki.md               # Original pattern document (reference only)
-│   ├── schemas/                  # JSON Schema for frontmatter
-│   ├── scripts/                  # Health check, QMD setup, CI pipelines
-│   └── .markdownlint.yaml        # Markdown linting rules
-├── wiki.config.yml               # Project-specific configuration
-├── qmd.yml                       # QMD search engine configuration
-├── package.json                  # Local remark dependencies
-├── index.md                      # Content-oriented catalog of all wiki pages
-├── log.md                        # Chronological append-only activity log
-├── raw/                          # Raw source documents (IMMUTABLE — never modify)
-│   └── .gitkeep
-└── wiki/                         # All wiki pages organized by entity type
-    ├── entities/                 # Specific technologies and products
-    ├── concepts/                 # Architectural patterns and design principles
-    ├── guides/                   # Step-by-step procedures
-    └── reference/                # Catalogs, comparisons, lookup tables
+AGENTS.md                       # THIS FILE — module maintenance guide
+instance/AGENTS.md              # The wiki schema (copied into instances)
+llm-wiki.md                     # Original pattern document (reference)
+README.md                       # Module overview + quick start
+.markdownlint.yaml              # Shared markdown rules (copied into instances)
+.pre-commit-config.yaml         # Pre-commit hooks (copied into instances)
+.remarkrc.mjs                   # remark config (module self-lint)
+package.json                    # npm: lint, test, check
+schemas/
+  wiki-page.schema.yaml         # JSON Schema for wiki page frontmatter
+  wiki-config.schema.yaml       # JSON Schema for wiki.config.yml
+instance/
+  AGENTS.md                     # Wiki schema (source of the instance root AGENTS.md)
+scripts/
+  bootstrap.sh                  # Initialize/regenerate an instance from config
+  new-wiki.sh                   # One-command creation of a brand-new instance
+  ci-lint.sh                    # Full lint pipeline (used by reusable workflow)
+  ci-index.sh                   # QMD index build + verify (reusable workflow)
+  ci-consistency.sh             # Drift check (generated/copied files vs config)
+  qmd-setup.sh                  # QMD collection + context from config
+  validate-config.py            # Validate wiki.config.yml against schema
+  wiki-health.py                # Orphans, bidirectional links, type/dir match…
+  pre-commit-check.sh
+  pre-commit-raw-protect.sh
+  pre-commit-unique-filenames.sh
+  lib/
+    config.sh                   # read_config(), require_config(), require_submodule()
+    generate.sh                 # File generators (package.json, qmd.yml, CI, …)
+    install-tools.sh            # install_all_lint_tools(), install_qmd(), …
+tests/
+  test_wiki_health.py           # Unit tests for wiki-health.py checks
+.github/workflows/
+  lint.yml                      # Reusable lint workflow
+  index.yml                     # Reusable index workflow
 ```
 
-The `.llm-wiki/` submodule provides linting, testing, and tooling shared across all wiki instances. Instance-specific content lives outside the submodule.
+## Module ↔ instance relationship
 
-## Three Layers
+Each instance adds this repo as a git submodule at `.llm-wiki/` and runs
+`bootstrap.sh`, which produces an instance with:
 
-1. **Raw sources** (`raw/`) — Immutable source documents. You read from them but NEVER modify, move, or delete them. This is the source of truth.
-2. **The wiki** (`wiki/`) — LLM-generated markdown pages organized by entity type. You own this layer entirely.
-3. **The schema** (`AGENTS.md` + `wiki.config.yml`) — Tells you how the wiki is structured and what workflows to follow.
+- **Copied** from the module (must match the submodule exactly):
+  `AGENTS.md` (← `instance/AGENTS.md`), `.markdownlint.yaml`, `.pre-commit-config.yaml`.
+- **Generated** from `wiki.config.yml`:
+  `.gitignore`, `.remarkrc.mjs`, `package.json`, `qmd.yml`,
+  `.github/workflows/wiki-ci.yml`.
+- **Instance-owned** (never regenerated, the human/agent's content):
+  `wiki.config.yml`, `wiki/`, `raw/`, `index.md`, `log.md`, `README.md`.
 
-## Entity Types (Directory Structure)
+Instance CI calls the module's **reusable** workflows, always pinned to `@main`:
 
-Pages are organized by **what kind of knowledge** they represent. Each directory maps to a distinct search intent:
+- `tibrezus/llm-wiki/.github/workflows/lint.yml@main`
+- `tibrezus/llm-wiki/.github/workflows/index.yml@main`
 
-| Directory | Type | Search Intent | Classification Rule |
-|-----------|------|--------------|-------------------|
-| `entities/` | `entity` | "What is X?" — searched by name | Has a GitHub repo, version number, or is a specific product/technology |
-| `concepts/` | `concept` | "How does X work?" — searched by description | Cross-cutting idea, pattern, or architectural principle connecting entities |
-| `guides/` | `guide` | "How to X?" — searched by intent | Step-by-step procedure the reader follows |
-| `reference/` | `reference` | "Compare/Lookup X" — searched by topic | Catalog, comparison, or lookup table |
+`ci-consistency.sh` verifies that an instance's copied/generated files still
+match the current `wiki.config.yml` + submodule, and instructs the operator to
+re-run `bootstrap.sh` if they have drifted.
 
-## Page Format
+## Working in this module
 
-Every wiki page must follow this exact structure:
+### Self-checks (run before pushing)
 
-```markdown
----
-title: Descriptive Specific Title
-type: entity | concept | guide | reference
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
-sources: []
-tags: [type-tag, tag2, tag3]
----
-
-# Descriptive Specific Title
-
-Dense keyword-rich summary paragraph (2-3 sentences). This becomes the first
-and most important qmd chunk. Include primary search terms and synonyms.
-
-## Section Title
-
-Body content with [[wikilinks]] to other wiki pages.
-
-## See Also
-
-- [[related-page-1]] — Brief description
-- [[related-page-2]] — Brief description
+```bash
+npm run lint    # markdownlint on module + instance/ markdown
+npm run test    # pytest unit tests for wiki-health.py
+npm run check   # lint + test
 ```
 
-### Frontmatter Rules
+### Principles
 
-- `title` — Specific and descriptive (e.g., "Cilium CNI and eBPF Data Plane", not "Cilium"). This is embedded with every qmd chunk. Required.
-- `type` — One of `entity`, `concept`, `guide`, `reference`. Must match the directory the file is in. Required.
-- `created` — Date first created (YYYY-MM-DD). Required. Never change after creation.
-- `updated` — Date of last meaningful content update (YYYY-MM-DD). Required. Update on every modification.
-- `sources` — Array of filenames from `raw/` that contributed. Empty array if none. Required.
-- `tags` — Array of 2-7 lowercase tags (pattern: `^[a-z0-9][a-z0-9-]*$`). First tag must match the type (`entity`, `concept`, etc.). Required.
+- **`instance/AGENTS.md` is the single source of truth for the wiki schema.**
+  Editing it changes every instance on its next bootstrap. Edit deliberately.
+- **`scripts/lib/generate.sh` is the single source of truth for generated files.**
+  Never hand-edit generated file contents — change the generator.
+- **`ci-consistency.sh` must know about every copied/generated file.** If you add
+  a new copied/generated artifact, update both `generate.sh` and
+  `ci-consistency.sh`'s `GENERATED_FILES` / `COPIED_FILES` lists, plus the
+  `copied_source()` mapping for any file whose submodule path differs from its
+  instance path (as `AGENTS.md` does — it is sourced from `instance/AGENTS.md`).
+- **Backwards compatibility.** A change that invalidates existing
+  `wiki.config.yml` values or existing wiki pages will break every instance's CI
+  simultaneously. Coordinate breaking changes across all instances in the same
+  effort, or guard them so old instances keep passing.
+- **No instance content here.** Never create `wiki/`, `raw/`, `wiki.config.yml`,
+  `index.md`, or `log.md` in this repo.
 
-### Body Rules (QMD-Optimized)
+### Evolving the schema (`instance/AGENTS.md`)
 
-These rules ensure every page produces optimal qmd search chunks:
+1. Edit `instance/AGENTS.md`. Keep the wiki schema there — do not duplicate it
+   elsewhere.
+2. `npm run lint` (the lint script includes `instance/*.md`).
+3. If the change implies a frontmatter/structure change, update
+   `schemas/wiki-page.schema.yaml` to match, and add/adjust
+   `tests/test_wiki_health.py` + `wiki-health.py` accordingly.
+4. Commit and push on `main`. Instances pick up the new schema on their next
+   submodule bump + `bootstrap.sh` run.
 
-- **Title rule**: `# Title` must be specific and descriptive — it becomes the embedding prefix for every chunk. "Cilium CNI and eBPF Data Plane" not "Cilium".
-- **Summary rule**: First paragraph after `# Title` must be a dense 2-3 sentence summary containing primary keywords and search terms. This becomes the first chunk.
-- **Section rule**: Each `## Section` should be 200-900 tokens. If a section exceeds 900 tokens, split into its own page or add `###` subsections. `##` headings are qmd chunk boundaries (score 90).
-- **Section heading rule**: `## Section` headings should be descriptive — "eBPF Data Plane" not "Overview". Section headings are chunk boundaries.
-- **Cross-reference rule**: Include context with wikilinks — "See [[cilium]] for Cilium CNI eBPF configuration" not just "See [[cilium]]". Extra text is indexed by BM25.
-- **Tag rule**: Include 3-7 tags covering topic, search terms, and related concepts. Tags are indexed by FTS5.
-- **See Also rule**: Every page ends with `## See Also` linking to at least 2 related pages.
-- **Never use `#` headings** in body (reserved for title).
-- **Never use markdown links** for internal references — always use `[[wikilinks]]`.
-- **Keep language concise and factual** — reference material, not prose.
+### Evolving the generators (`scripts/lib/generate.sh`)
 
-## Naming Conventions
+1. Edit the relevant `generate_*` function.
+2. If the change affects what `ci-consistency.sh` should compare, update the
+   `GENERATED_FILES`/`COPIED_FILES` lists and any path mapping.
+3. Sanity-check generation by bootstrapping a throwaway instance:
+   `bash scripts/new-wiki.sh /tmp/wiki-smoke` (interactive).
+4. `npm run check`; push on `main`.
 
-- File names: lowercase, hyphen-separated, `.md` extension (e.g., `talos-linux.md`, `edge-computing.md`).
-- **Unique filenames required** — no two files in `wiki/` may share a name, regardless of directory. This enables filename-only wikilinks.
-- Names should be descriptive nouns or noun-phrases that work as wikilink targets.
-- Entity pages use the technology name (e.g., `cilium.md`, `flux-cd.md`).
-- Concept pages use descriptive nouns (e.g., `edge-computing.md`, `networking.md`).
-- Guide pages use gerund or noun forms (e.g., `deployment.md`, `ci-cd.md`).
-- Never use spaces, uppercase, or special characters.
+## Creating a new wiki instance
 
-## Cross-Referencing Rules
+Two equivalent paths, both single-command from an empty directory:
 
-1. **Always use `[[wikilinks]]`** — filename only, no path, no extension: `[[cilium]]` not `[[connectivity/cilium.md]]`.
-2. **When creating a new page**, scan all existing pages and add wikilinks where relevant.
-3. **When updating a page**, check if new content mentions concepts with their own pages and add wikilinks.
-4. **Every page must have `## See Also`** with at least 2 related pages.
-5. **Bidirectional linking**: if page A links to B, B should link back to A in `## See Also`.
-6. **Hub pages** (like `architecture.md`, `security.md`) should link to many detail pages. Detail pages link back.
-7. **Pipe wikilinks in tables**: avoid `[[page|display text]]` inside markdown tables — the `|` conflicts with column delimiters. Use plain wikilinks or restructure.
+**Option A — full creation from scratch (single command):**
 
-## Workflow: Ingest
-
-When the human provides a new source document:
-
-1. **Save the source** to `raw/` with a descriptive filename (e.g., `YYYY-MM-DD-descriptive-name.md`). NEVER modify files in `raw/` after saving.
-2. **Read the source** thoroughly. Extract key information, entities, concepts, claims.
-3. **Discuss with the human** (optional but preferred): summarize takeaways, confirm emphasis.
-4. **Update existing pages**: scan wiki for pages that should be updated. Update content, add wikilinks, note contradictions. Update `updated` date and add source to `sources` array.
-5. **Create new pages** if the source introduces topics not yet covered. Determine the entity type (entity/concept/guide/reference) and place in the correct directory. Follow page format exactly.
-6. **Update `index.md`**: add new pages, update modified page summaries.
-7. **Append to `log.md`**: add an entry documenting the ingest.
-
-A single source may touch 10-15 wiki pages. This is expected and correct.
-
-### Ingest Checklist
-
-- [ ] Source saved to `raw/` (if not already there)
-- [ ] All relevant wiki pages updated with new information
-- [ ] All relevant wiki pages have the source in `sources` frontmatter
-- [ ] All relevant wiki pages have updated `updated` date
-- [ ] New pages created for any new topics (correct entity type directory)
-- [ ] Wikilinks added from existing pages to any new pages
-- [ ] `index.md` updated
-- [ ] `log.md` appended with ingest entry
-
-## Workflow: Query
-
-When the human asks a question:
-
-1. **Use qmd to search** — run `qmd query "question" --json -n 10` to find relevant pages.
-2. **Read relevant wiki pages** in full.
-3. **Synthesize an answer** with citations (mention which wiki pages contributed).
-4. **If the answer is substantial**, offer to create it as a new wiki page. Good answers compound in the knowledge base.
-5. **If you create a new page**, follow the full page format, update `index.md`, append to `log.md`.
-
-### Query Page Creation
-
-When a query result becomes a new page:
-
-- Determine the entity type and place in the correct directory.
-- Tag it with `query-derived` in addition to its type tag.
-- List any raw sources in `sources` frontmatter.
-- Cross-reference thoroughly with existing pages.
-
-## Workflow: Lint
-
-Periodically health-check the wiki:
-
-1. **Run native linters**: `markdownlint-cli2`, `mdlint --vault wiki/`, `npx remark wiki/ --frail`
-2. **Run wiki health check**: `python3 .llm-wiki/scripts/wiki-health.py wiki/`
-3. **Run `qmd status`**: verify index health.
-4. **Contradictions**: scan pages for conflicting claims. Flag and propose resolutions.
-5. **Missing pages**: find concepts mentioned but lacking their own page.
-6. **Missing cross-references**: find topics with pages but no wikilinks.
-
-After a lint pass, append a summary to `log.md`.
-
-## Tooling Reference
-
-### Native Validation Tools
-
-| Tool | Purpose | Install |
-|------|---------|---------|
-| markdownlint-cli2 | Markdown formatting rules | `npm install -g markdownlint-cli2` |
-| mdlint-obsidian | Obsidian wikilinks, frontmatter, embeds (22 rules) | `pip install mdlint-obsidian` |
-| remark-lint-frontmatter-schema | Frontmatter validation against JSON Schema | `npm ci` (local devDependencies) |
-| qmd | Local search engine (BM25 + vector + reranking) | `npm install -g @tobilu/qmd` |
-
-### Pre-Commit Hooks
-
-Runs on every commit: markdownlint → mdlint-obsidian → remark frontmatter schema → unique filenames → raw/ protection. Configured via `.pre-commit-config.yaml` (symlinked from `.llm-wiki/`).
-
-### CI Pipeline
-
-The instance CI workflow (`.github/workflows/wiki-ci.yml`) calls the module's reusable GitHub Actions workflows:
-
-1. **lint** — `uses: tibrezus/llm-wiki/.github/workflows/lint.yml@main` — consistency check → config validation → markdownlint → mdlint-obsidian → remark → unique filenames → raw/ immutability → wiki-health.py
-2. **index** — `uses: tibrezus/llm-wiki/.github/workflows/index.yml@main` — qmd setup → update → embed → status → search test
-
-The reusable workflows live in the module repo and are always fetched from `@main`. This means updating the CI pipeline across all instances is done by updating the module — instances never need to edit their CI workflow. The consistency check (`ci-consistency.sh`) detects instances that need to re-run bootstrap to sync generated files.
-
-CI runner and Node.js version are configured in `wiki.config.yml` and passed as inputs to the reusable workflows.
-
-## File: index.md
-
-Content-oriented catalog. Organized by entity type. Every wiki page must be listed. Update on every ingest or page creation.
-
-## File: log.md
-
-Chronological append-only log. Use format:
-
-```markdown
-## [YYYY-MM-DD] operation | Short Title
-
-- **Operation**: ingest | query | lint | create | update
-- **Pages affected**: list of wiki pages
-- **Summary**: what happened and why
+```bash
+bash /path/to/llm-wiki/scripts/new-wiki.sh my-wiki
+# or, without a local clone of the module:
+curl -fsSL https://raw.githubusercontent.com/tibrezus/llm-wiki/main/scripts/new-wiki.sh \
+  | bash -s my-wiki
 ```
 
-## What NOT to Do
+`new-wiki.sh` creates the directory, `git init`s it, adds the module as the
+`.llm-wiki` submodule, then runs `bootstrap.sh` to generate all instance files.
+The result is a ready-to-use wiki instance.
 
-- **Never modify files in `raw/`** after placement
-- **Never delete wiki pages** without explicit instruction
-- **Never use inline HTML** in wiki pages
-- **Never use `#` headings** in body (reserved for title)
-- **Never use markdown links** for internal references — use `[[wikilinks]]`
-- **Never leave a page without frontmatter**
-- **Never create a page without `## See Also`**
-- **Never skip updating `index.md`** after page changes
-- **Never skip appending to `log.md`** after any operation
-- **Never add comments to code** unless explicitly asked
-- **Never place a page in the wrong entity type directory**
+**Option B — when the submodule is already added:**
+
+```bash
+git submodule add https://github.com/tibrezus/llm-wiki.git .llm-wiki
+bash .llm-wiki/scripts/bootstrap.sh
+```
+
+In both cases `bootstrap.sh` is the actual generator and is idempotent:
+re-running it regenerates tooling files from `wiki.config.yml` while preserving
+instance-owned content (`wiki/`, `raw/`, `index.md`, `log.md`, `README.md`).
+
+## Propagating a module change to existing instances
+
+```bash
+cd <instance-root>
+git -C .llm-wiki fetch origin && git -C .llm-wiki checkout main && git -C .llm-wiki pull
+bash .llm-wiki/scripts/bootstrap.sh   # refresh copied/generated files
+git add -A
+git commit -m "chore: update llm-wiki submodule + regenerate"
+npm run check                          # verify
+```
+
+Bootstrap re-copies `AGENTS.md` from `.llm-wiki/instance/AGENTS.md`, so an
+instance's root `AGENTS.md` content stays identical before and after the split.
+
+## Common tasks
+
+- Lint + test the module: `npm run check`
+- Lint just the schema doc: `npx markdownlint-cli2 'instance/*.md'`
+- Validate an instance config (run in instance root):
+  `python3 .llm-wiki/scripts/validate-config.py wiki.config.yml`
+- Full instance health (run in instance root): `bash .llm-wiki/scripts/ci-lint.sh`
+- Smoke-test a fresh instance: `bash scripts/new-wiki.sh /tmp/wiki-smoke`
+
+## What NOT to do
+
+- **Never** create `wiki/`, `raw/`, `wiki.config.yml`, `index.md`, or `log.md`
+  in this module repo — it is tooling only.
+- **Never** hand-edit generated file contents; edit the generator in
+  `generate.sh`.
+- **Never** let `instance/AGENTS.md` drift from the schema the instances actually
+  follow — it is the canonical schema.
+- **Never** ship a module change without `npm run check` passing and without
+  considering its effect on all existing instances.

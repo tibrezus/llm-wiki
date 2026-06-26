@@ -43,6 +43,16 @@ GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' '.github/
 COPIED_FILES=('AGENTS.md' '.markdownlint.yaml' '.pre-commit-config.yaml')
 SUBMODULE_DIR="$INSTANCE_ROOT/.llm-wiki"
 
+# Resolve the submodule source path for a copied file.
+# AGENTS.md is sourced from instance/AGENTS.md (the wiki schema); all other
+# copied files live at the module root.
+copied_source() {
+    case "$1" in
+        AGENTS.md) echo "$SUBMODULE_DIR/instance/AGENTS.md" ;;
+        *)         echo "$SUBMODULE_DIR/$1" ;;
+    esac
+}
+
 FAILED=0
 
 echo ""
@@ -67,7 +77,7 @@ done
 echo ''
 echo '--- Copied Files (must match submodule) ---'
 for file in "${COPIED_FILES[@]}"; do
-    expected="$SUBMODULE_DIR/$file"
+    expected="$(copied_source "$file")"
     actual="$INSTANCE_ROOT/$file"
     if [ ! -f "$expected" ]; then
         echo "  MISSING-IN-SUBMODULE: $file"

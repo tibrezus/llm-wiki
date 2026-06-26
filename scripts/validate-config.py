@@ -71,6 +71,41 @@ def validate_manual(config: dict, schema: dict) -> list[str]:
         elif "global_context" not in qmd:
             errors.append("Missing required field: qmd.global_context")
 
+    if "arch" in config:
+        arch = config["arch"]
+        if not isinstance(arch, dict):
+            errors.append("arch must be an object")
+        else:
+            projects = arch.get("projects", [])
+            if not isinstance(projects, list) or len(projects) == 0:
+                errors.append("arch.projects must be a non-empty array")
+            else:
+                import re as _re
+                for i, p in enumerate(projects):
+                    if not isinstance(p, dict):
+                        errors.append(f"arch.projects[{i}] must be an object")
+                        continue
+                    for key in ("name", "repo", "language"):
+                        if key not in p:
+                            errors.append(f"Missing required field: arch.projects[{i}].{key}")
+                    if "name" in p and not _re.match(r'^[a-z0-9][a-z0-9-]*$', str(p.get("name", ""))):
+                        errors.append(f"arch.projects[{i}].name must match ^[a-z0-9][a-z0-9-]*$")
+                    # Validate the graph acquisition field.
+                    graph = p.get("graph", "extract")
+                    if isinstance(graph, str):
+                        if graph != "extract":
+                            errors.append(f"arch.projects[{i}].graph string must be 'extract'")
+                    elif isinstance(graph, dict):
+                        if graph.get("source") != "fetch":
+                            errors.append(f"arch.projects[{i}].graph.source must be 'fetch'")
+                        if not graph.get("scip_url"):
+                            errors.append(f"arch.projects[{i}].graph.scip_url is required when source=fetch")
+                    else:
+                        errors.append(f"arch.projects[{i}].graph must be 'extract' or an object")
+                    # extract mode needs a repo to clone.
+                    if (isinstance(graph, str) and graph == "extract") and not p.get("repo"):
+                        errors.append(f"arch.projects[{i}].repo is required for graph: extract")
+
     return errors
 
 

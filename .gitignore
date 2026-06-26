@@ -1,2 +1,4 @@
 node_modules/
 __pycache__/
+# Generated SCIP protobuf binding cache (scripts/arch)
+scripts/arch/_pb_cache/

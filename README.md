@@ -8,7 +8,8 @@ This repository is used as a **git submodule** inside wiki instances. It provide
 
 | Component | Path | Purpose |
 |-----------|------|---------|
-| Wiki Schema | `AGENTS.md` | Page format, frontmatter rules, workflows, naming conventions |
+| Module Guide | `AGENTS.md` | How to maintain this tooling module (scripts, schemas, CI, bootstrap) |
+| Wiki Schema | `instance/AGENTS.md` | The instance schema — page format, frontmatter, workflows (copied into each instance's root `AGENTS.md`) |
 | Pattern Document | `llm-wiki.md` | The original LLM Wiki idea document |
 | Page Frontmatter Schema | `schemas/wiki-page.schema.yaml` | JSON Schema for wiki page YAML frontmatter |
 | Config Schema | `schemas/wiki-config.schema.yaml` | JSON Schema for `wiki.config.yml` |
@@ -19,6 +20,7 @@ This repository is used as a **git submodule** inside wiki instances. It provide
 | CI Lint Pipeline | `scripts/ci-lint.sh` | Full lint pipeline (markdownlint, mdlint-obsidian, remark, health check) |
 | CI Index Pipeline | `scripts/ci-index.sh` | QMD index build, embed, health verification |
 | Bootstrap Script | `scripts/bootstrap.sh` | Initialize a new wiki instance with interactive prompts |
+| New Wiki Script | `scripts/new-wiki.sh` | One-command creation of a brand-new instance (init + submodule + bootstrap) |
 | Reusable Lint Workflow | `.github/workflows/lint.yml` | GitHub Actions reusable workflow for lint + consistency |
 | Reusable Index Workflow | `.github/workflows/index.yml` | GitHub Actions reusable workflow for QMD indexing |
 | Shared Config Reader | `scripts/lib/config.sh` | `read_config()`, `require_config()`, `require_submodule()` |
@@ -30,21 +32,26 @@ This repository is used as a **git submodule** inside wiki instances. It provide
 
 ## Quick Start
 
-Create a new wiki instance:
+Create a new wiki instance with a single command:
 
 ```bash
-# 1. Create a new repository
-mkdir my-wiki && cd my-wiki
-git init
+bash /path/to/llm-wiki/scripts/new-wiki.sh my-wiki
+# or, without a local clone of the module:
+curl -fsSL https://raw.githubusercontent.com/tibrezus/llm-wiki/main/scripts/new-wiki.sh \
+  | bash -s my-wiki
+```
 
-# 2. Add this module as a submodule
+`new-wiki.sh` creates `my-wiki/`, `git init`s it, adds this module as the
+`.llm-wiki` submodule, then runs `bootstrap.sh`. Alternatively, if the submodule
+is already added:
+
+```bash
 git submodule add https://github.com/tibrezus/llm-wiki.git .llm-wiki
-
-# 3. Bootstrap the wiki
 bash .llm-wiki/scripts/bootstrap.sh
 ```
 
 The bootstrap script will:
+
 - Prompt for project name, description, QMD contexts, and CI runner
 - Create `wiki.config.yml` with project-specific configuration
 - Generate symlinks to shared lint configs
@@ -75,6 +82,7 @@ jobs:
 ```
 
 The lint workflow runs:
+
 1. **Consistency check** — verifies generated files match current `wiki.config.yml` and symlinks are correct
 2. **Config validation** — validates `wiki.config.yml` against schema
 3. **markdownlint** — markdown formatting
@@ -85,6 +93,7 @@ The lint workflow runs:
 8. **Wiki health check** — orphans, bidirectional links, type/directory match, stale pages
 
 The index workflow runs:
+
 1. **QMD setup** — collection + context from config
 2. **Index + embed** — build search index
 3. **Verify + search test** — confirm index health
@@ -95,14 +104,15 @@ When the module's CI scripts are updated, all instances get the changes on their
 
 After bootstrapping, a wiki instance looks like this:
 
-```
+```text
 my-wiki/
 ├── .llm-wiki/                          # This module (git submodule)
-│   ├── AGENTS.md                       # Wiki schema
+│   ├── AGENTS.md                       # Module maintenance guide
+│   ├── instance/AGENTS.md              # Wiki schema (copied to instance root)
 │   ├── llm-wiki.md                     # Pattern document
 │   ├── schemas/                        # Frontmatter + config schemas
 │   └── scripts/                        # Health check, CI pipelines, setup
-├── AGENTS.md                     # Copied from .llm-wiki/AGENTS.md
+├── AGENTS.md                     # Copied from .llm-wiki/instance/AGENTS.md
 ├── .markdownlint.yaml            # Copied from .llm-wiki/.markdownlint.yaml
 ├── .pre-commit-config.yaml       # Copied from .llm-wiki/.pre-commit-config.yaml
 ├── .gitignore                          # Generated (git can't read symlinked gitignore)
@@ -129,13 +139,14 @@ When this module is updated, all instances get the changes:
 ```bash
 cd my-wiki
 cd .llm-wiki && git pull origin main && cd ..
-git add .llm-wiki
-git commit -m "chore: update llm-wiki submodule"
+bash .llm-wiki/scripts/bootstrap.sh   # refresh copied/generated files
+git add -A
+git commit -m "chore: update llm-wiki submodule + regenerate"
 ```
 
-Copied files (`AGENTS.md`, `.markdownlint.yaml`, `.pre-commit-config.yaml`) are refreshed by re-running bootstrap.
+Copied files (`AGENTS.md` from `.llm-wiki/instance/AGENTS.md`, plus `.markdownlint.yaml` and `.pre-commit-config.yaml` from the module root) are refreshed by re-running bootstrap.
 
-```
+```text
 Run 'bash .llm-wiki/scripts/bootstrap.sh' to regenerate drifted files.
 ```
 

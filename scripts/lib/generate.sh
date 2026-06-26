@@ -8,7 +8,9 @@ set -euo pipefail
 generate_agents_md() {
     local dest="$1"
     local submodule="$2"
-    cp "$submodule/AGENTS.md" "$dest/AGENTS.md"
+    # The wiki schema lives at instance/AGENTS.md in the module and is copied
+    # verbatim into the instance root as AGENTS.md.
+    cp "$submodule/instance/AGENTS.md" "$dest/AGENTS.md"
 }
 
 generate_markdownlint() {
@@ -126,6 +128,27 @@ jobs:
       runner: ${runner}
       node-version: "${node_version}"
 EOF
+    # The arch job is emitted only when the instance declares arch.projects.
+    # config_has requires a wiki.config.yml at $CONFIG_FILE; fall back to the
+    # destination config when generating into a temp dir (ci-consistency).
+    local prev_cfg="${CONFIG_FILE:-}"
+    if [ -f "$dest/wiki.config.yml" ]; then
+        CONFIG_FILE="$dest/wiki.config.yml"
+    fi
+    if command -v config_has >/dev/null 2>&1 && config_has arch.projects; then
+        cat >> "$dest/.github/workflows/wiki-ci.yml" <<EOF
+
+  arch:
+    uses: tibrezus/llm-wiki/.github/workflows/arch.yml@main
+    needs: lint
+    permissions:
+      contents: write
+    with:
+      runner: ${runner}
+      node-version: "${node_version}"
+EOF
+    fi
+    CONFIG_FILE="$prev_cfg"
 }
 
 generate_index() {
@@ -247,6 +270,6 @@ npm run validate      # frontmatter schema validation
 npm run health        # structural wiki health check
 \`\`\`
 
-See \`.llm-wiki/AGENTS.md\` for the full schema and \`llm-wiki.md\` for the original pattern document.
+See \`.llm-wiki/instance/AGENTS.md\` for the full schema and \`llm-wiki.md\` for the original pattern document.
 EOF
 }

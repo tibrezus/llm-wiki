@@ -42,6 +42,22 @@ read_config_default() {
     val=$(read_config "$key" 2>/dev/null) && echo "$val" || echo "$default"
 }
 
+# Exit 0 if a dotted config key exists (and is non-empty), 1 otherwise.
+config_has() {
+    local key="$1"
+    python3 -c "
+import sys, yaml
+with open('$CONFIG_FILE') as f:
+    c = yaml.safe_load(f) or {}
+v = c
+for k in '$key'.split('.'):
+    if not isinstance(v, dict) or k not in v:
+        sys.exit(1)
+    v = v[k]
+sys.exit(0 if v else 1)
+" 2>/dev/null
+}
+
 require_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         echo "ERROR: wiki.config.yml not found at $CONFIG_FILE"

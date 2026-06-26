@@ -1,0 +1,57 @@
+name: Arch
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: GitHub Actions runner label
+        type: string
+        default: ubuntu-latest
+      node-version:
+        description: Node.js version (unused by arch, kept for parity)
+        type: string
+        default: "20"
+
+# The arch pipeline regenerates raw/arch/*.{scip,map.txt} and commits them back
+# to the instance repository, so it needs write access to contents.
+permissions:
+  contents: write
+
+jobs:
+  arch:
+    name: Extract code graphs (SCIP) + rollup
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout instance (with llm-wiki submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install protoc
+        run: |
+          if ! command -v protoc >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          fi
+          protoc --version || true
+
+      - name: Install pyyaml + protobuf
+        run: |
+          python3 -m pip install --user pyyaml protobuf 2>/dev/null \
+            || python3 -m pip install --break-system-packages pyyaml protobuf
+
+      - name: Extract + rollup architecture graphs
+        run: bash .llm-wiki/scripts/arch/ci-arch.sh
+
+      - name: Commit updated raw/arch artifacts
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config user.name  "llm-wiki-arch-bot"
+          git config user.email "actions@github.com"
+          if ! git diff --quiet -- raw/arch; then
+            git add raw/arch
+            git commit -m "chore(arch): update code graph artifacts [skip ci]"
+            git push
+            echo "Committed updated raw/arch artifacts."
+          else
+            echo "No changes to raw/arch artifacts."
+          fi
