@@ -189,6 +189,13 @@ jobs:
         with:
           node-version: "${node_version}"
 
+      - name: Install pyyaml
+        run: |
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            python3 -m pip install --user pyyaml 2>/dev/null \\
+              || python3 -m pip install --break-system-packages pyyaml
+          fi
+
       - name: Run index pipeline
         run: bash .llm-wiki/scripts/ci-index.sh
 EOF
