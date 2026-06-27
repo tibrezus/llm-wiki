@@ -1,0 +1,30 @@
+name: "Repo Map (RIG)"
+description: "Produce a Repository Intelligence Graph (RIG) JSON from the repo's build system. Publishes as a Release asset for wiki consumption."
+
+inputs:
+  language:
+    description: "Primary programming language (go, typescript, python, rust, ...)"
+    required: true
+  output:
+    description: "Output file path (default: repo-map.json)"
+    required: false
+    default: "repo-map.json"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate RIG JSON
+      shell: bash
+      env:
+        LANGUAGE: ${{ inputs.language }}
+        OUTPUT: ${{ inputs.output }}
+      run: |
+        # Dispatch to the language-specific emitter.
+        EMITTER="$(dirname "$0")/emit-${LANGUAGE}.sh"
+        if [ ! -f "$EMITTER" ]; then
+          echo "::error::No RIG emitter for language '${LANGUAGE}'. Supported: go, typescript, python, rust."
+          echo "Request support at https://github.com/tibrezus/llm-wiki/issues"
+          exit 1
+        fi
+        bash "$EMITTER" "$OUTPUT"
+        echo "Generated RIG: $OUTPUT ($(wc -c < "$OUTPUT") bytes)"

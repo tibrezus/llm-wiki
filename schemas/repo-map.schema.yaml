@@ -1,0 +1,172 @@
+# RIG (Repository Intelligence Graph) JSON Schema
+#
+# The contract between a project and the wiki. The project's CI produces a
+# RIG JSON conforming to this schema and publishes it; the wiki fetches it,
+# validates against this schema, and commits it verbatim to raw/arch/.
+#
+# Based on the RIG standard (arXiv:2601.10112, github.com/Greenfuze/Spade).
+# Adapted to JSON Schema (yaml) for the llm-wiki module's validator.
+
+type: object
+required:
+  - repository
+  - components
+  - schema_version
+properties:
+  schema_version:
+    type: string
+    description: RIG schema version this document conforms to.
+  repository:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      ref:
+        type: string
+        description: Git ref or SHA the RIG was built from.
+      language:
+        type: string
+        description: Primary programming language (lowercase).
+      build_system:
+        type: string
+        description: Build system used (cmake, cargo, go-modules, npm, etc.).
+      generated_at:
+        type: string
+        format: date-time
+      generator:
+        type: string
+        description: Tool that produced this RIG (e.g. spade, llm-wiki-repo-map@v1).
+    additionalProperties: false
+  components:
+    type: array
+    description: Buildable components (executables, libraries, packages).
+    items:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+          description: Stable unique identifier within this RIG.
+        name:
+          type: string
+        type:
+          type: string
+          enum: [executable, shared_library, static_library, package_library, vm, interpreted, unknown]
+        programming_language:
+          type: string
+        source_files:
+          type: array
+          items:
+            type: string
+        depends_on_ids:
+          type: array
+          description: IDs of components this component depends on.
+          items:
+            type: string
+        external_packages_ids:
+          type: array
+          description: IDs of external packages used by this component.
+          items:
+            type: string
+        artifacts:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              relative_path:
+                type: string
+      additionalProperties: false
+  aggregators:
+    type: array
+    description: Build targets that orchestrate other targets (meta-targets, all, etc.).
+    items:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        depends_on_ids:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+  runners:
+    type: array
+    description: Build runners that execute commands.
+    items:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        arguments:
+          type: array
+          items:
+            type: string
+        depends_on_ids:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+  test_definitions:
+    type: array
+    description: Test definitions and their coverage edges.
+    items:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        covers_ids:
+          type: array
+          description: IDs of components this test exercises.
+          items:
+            type: string
+      additionalProperties: false
+  external_packages:
+    type: array
+    description: Third-party dependencies.
+    items:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        package_manager:
+          type: object
+          properties:
+            name:
+              type: string
+              description: npm, cargo, go-modules, pip, vcpkg, conan, etc.
+            package_name:
+              type: string
+      additionalProperties: false
+  entrypoints:
+    type: array
+    description: Component IDs that are system entrypoints (where execution begins).
+    items:
+      type: string
+additionalProperties: false

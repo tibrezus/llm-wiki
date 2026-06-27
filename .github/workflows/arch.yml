@@ -12,14 +12,14 @@ on:
         type: string
         default: "20"
 
-# The arch pipeline regenerates raw/arch/*.{scip,map.txt} and commits them back
-# to the instance repository, so it needs write access to contents.
+# The arch pipeline fetches project-published RIG JSON and commits them to
+# raw/arch/, so it needs write access to contents.
 permissions:
   contents: write
 
 jobs:
   arch:
-    name: Extract code graphs (SCIP) + rollup
+    name: Fetch + validate RIG architecture graphs
     runs-on: ${{ inputs.runner }}
     steps:
       - name: Checkout instance (with llm-wiki submodule)
@@ -27,19 +27,21 @@ jobs:
         with:
           submodules: true
 
-      - name: Install protoc
+      - name: Install pyyaml
         run: |
-          if ! command -v protoc >/dev/null 2>&1; then
-            sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            python3 -m pip install --user pyyaml 2>/dev/null \
+              || python3 -m pip install --break-system-packages pyyaml
           fi
-          protoc --version || true
 
-      - name: Install pyyaml + protobuf
+      - name: Install jsonschema (for RIG validation)
         run: |
-          python3 -m pip install --user pyyaml protobuf 2>/dev/null \
-            || python3 -m pip install --break-system-packages pyyaml protobuf
+          python3 -c 'import jsonschema' 2>/dev/null \
+            || python3 -m pip install --user jsonschema 2>/dev/null \
+            || python3 -m pip install --break-system-packages jsonschema \
+            || echo "::warning::jsonschema not installed; fallback validation will be used"
 
-      - name: Extract + rollup architecture graphs
+      - name: Fetch + validate RIG graphs
         run: bash .llm-wiki/scripts/arch/ci-arch.sh
 
       - name: Commit updated raw/arch artifacts
@@ -49,7 +51,7 @@ jobs:
           git config user.email "actions@github.com"
           if ! git diff --quiet -- raw/arch; then
             git add raw/arch
-            git commit -m "chore(arch): update code graph artifacts [skip ci]"
+            git commit -m "chore(arch): update RIG architecture graphs [skip ci]"
             git push
             echo "Committed updated raw/arch artifacts."
           else

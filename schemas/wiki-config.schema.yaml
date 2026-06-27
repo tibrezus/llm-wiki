@@ -52,78 +52,22 @@ properties:
   arch:
     type: object
     properties:
-      budget_tokens:
-        type: integer
-        minimum: 1000
-        default: 8000
       projects:
         type: array
         minItems: 1
         items:
-          allOf:
-            - type: object
-              required:
-                - name
-                - language
-              properties:
-                name:
-                  type: string
-                  pattern: "^[a-z0-9][a-z0-9-]*$"
-                repo:
-                  type: string
-                  # Required for graph: extract (wiki clones the repo). Optional
-                  # for graph: fetch (the project owns generation).
-                ref:
-                  type: string
-                  default: main
-                language:
-                  type: string
-                  # Used for the rollup label and indexer dispatch. One of the
-                  # supported SCIP indexers' languages.
-                  enum: [go, typescript, python, ruby, rust, java, kotlin, scala]
-                indexer:
-                  type: string
-                  # Optional override of the default scip-<language> indexer
-                  # (graph: extract only).
-                path:
-                  type: string
-                  # Optional sub-path within the repo to index (graph: extract only).
-                graph:
-                  # Acquisition mode. Defaults to "extract" (wiki clones +
-                  # indexes) when omitted. Use {source: fetch, scip_url: ...}
-                  # when the project's own CI generates and publishes the .scip.
-                  oneOf:
-                    - type: string
-                      enum: [extract]
-                    - type: object
-                      required:
-                        - source
-                        - scip_url
-                      properties:
-                        source:
-                          type: string
-                          enum: [fetch]
-                        scip_url:
-                          type: string
-                          minLength: 1
-                        map_url:
-                          type: string
-                          # Optional pre-rolled map.txt; if absent the wiki
-                          # rolls up the .scip itself at its configured budget.
-                      additionalProperties: false
-              additionalProperties: false
-            # repo is required unless the project is in fetch mode (it owns
-            # generation and exposes the .scip itself).
-            - if:
-                properties:
-                  graph:
-                    type: object
-                    properties:
-                      source:
-                        const: fetch
-                    required: [source]
-                required: [graph]
-              else:
-                required: [repo]
+          type: object
+          required:
+            - name
+            - rig_url
+          properties:
+            name:
+              type: string
+              pattern: "^[a-z0-9][a-z0-9-]*$"
+            rig_url:
+              type: string
+              minLength: 1
+              description: HTTPS URL where the project publishes its RIG JSON (GitHub Release asset).
+          additionalProperties: false
     additionalProperties: false
 additionalProperties: false
