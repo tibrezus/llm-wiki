@@ -38,7 +38,17 @@ generate_qmd_yml "$TMPDIR" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUID
 generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE"
 
 # Files to compare (generated from config)
-GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' '.github/workflows/wiki-ci.yml')
+# Determine the workflow directory from the platform config.
+CI_PLATFORM=$(read_config_default ci.platform "github")
+WF_PATH=
+WARECASE_PATH=".github/workflows/wiki-ci.yml"
+case "$CI_PLATFORM" in
+    forgejo) WARECASE_PATH=".forgejo/workflows/wiki-ci.yml" ;;
+    gitea)   WARECASE_PATH=".gitea/workflows/wiki-ci.yml" ;;
+    *)       WARECASE_PATH=".github/workflows/wiki-ci.yml" ;;
+esac
+
+GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' "${WARECASE_PATH}")
 # Files to compare (copied from submodule)
 COPIED_FILES=('AGENTS.md' '.markdownlint.yaml' '.pre-commit-config.yaml')
 SUBMODULE_DIR="$INSTANCE_ROOT/.llm-wiki"

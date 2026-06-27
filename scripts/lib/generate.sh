@@ -104,8 +104,17 @@ generate_ci_workflow() {
     local dest="$1"
     local runner="$2"
     local node_version="$3"
-    mkdir -p "$dest/.github/workflows"
-    cat > "$dest/.github/workflows/wiki-ci.yml" <<EOF
+    local platform="${4:-github}"
+
+    local wf_dir
+    case "$platform" in
+        forgejo) wf_dir="$dest/.forgejo/workflows" ;;
+        gitea)   wf_dir="$dest/.gitea/workflows" ;;
+        *)       wf_dir="$dest/.github/workflows" ;;
+    esac
+    mkdir -p "$wf_dir"
+
+    cat > "$wf_dir/wiki-ci.yml" <<EOF
 name: Wiki CI
 
 on:
@@ -116,36 +125,105 @@ on:
 
 jobs:
   lint:
-    uses: tibrezus/llm-wiki/.github/workflows/lint.yml@main
-    with:
-      runner: ${runner}
-      node-version: "${node_version}"
+    name: Lint, Validate, and Consistency
+    runs-on: ${runner}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${node_version}"
+
+      - name: Install pyyaml
+        run: |
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            python3 -m pip install --user pyyaml 2>/dev/null \\
+              || python3 -m pip install --break-system-packages pyyaml
+          fi
+
+      - name: Install lint tools
+        run: bash .llm-wiki/scripts/lib/install-tools.sh && export PATH="\$HOME/.local/bin:\$PATH"
+
+      - name: Install npm dependencies
+        run: npm ci 2>/dev/null || npm install
+
+      - name: Consistency check
+        run: bash .llm-wiki/scripts/ci-consistency.sh
+
+      - name: Lint pipeline
+        run: |
+          export PATH="\$HOME/.local/bin:\$PATH"
+          bash .llm-wiki/scripts/ci-lint.sh
 
   index:
-    uses: tibrezus/llm-wiki/.github/workflows/index.yml@main
+    name: QMD Index Health
+    runs-on: ${runner}
     needs: lint
-    with:
-      runner: ${runner}
-      node-version: "${node_version}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "${node_version}"
+
+      - name: Install pyyaml
+        run: |
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            python3 -m pip install --user pyyaml 2>/dev/null \\
+              || python3 -m pip install --break-system-packages pyyaml
+          fi
+
+      - name: Run index pipeline
+        run: bash .llm-wiki/scripts/ci-index.sh
 EOF
+
     # The arch job is emitted only when the instance declares arch.projects.
-    # config_has requires a wiki.config.yml at $CONFIG_FILE; fall back to the
-    # destination config when generating into a temp dir (ci-consistency).
     local prev_cfg="${CONFIG_FILE:-}"
     if [ -f "$dest/wiki.config.yml" ]; then
         CONFIG_FILE="$dest/wiki.config.yml"
     fi
     if command -v config_has >/dev/null 2>&1 && config_has arch.projects; then
-        cat >> "$dest/.github/workflows/wiki-ci.yml" <<EOF
+        cat >> "$wf_dir/wiki-ci.yml" <<EOF
 
   arch:
-    uses: tibrezus/llm-wiki/.github/workflows/arch.yml@main
+    name: Fetch + validate RIG architecture graphs
+    runs-on: ${runner}
     needs: lint
     permissions:
       contents: write
-    with:
-      runner: ${runner}
-      node-version: "${node_version}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install pyyaml + jsonschema
+        run: |
+          python3 -m pip install --user pyyaml jsonschema 2>/dev/null \\
+            || python3 -m pip install --break-system-packages pyyaml jsonschema
+
+      - name: Fetch + validate RIG graphs
+        run: bash .llm-wiki/scripts/arch/ci-arch.sh
+
+      - name: Commit updated raw/arch artifacts
+        run: |
+          git config user.name  "llm-wiki-arch-bot"
+          git config user.email "actions@noreply.example.com"
+          if ! git diff --quiet -- raw/arch; then
+            git add raw/arch
+            git commit -m "chore(arch): update RIG architecture graphs [skip ci]"
+            git push
+          else
+            echo "No changes to raw/arch artifacts."
+          fi
 EOF
     fi
     CONFIG_FILE="$prev_cfg"

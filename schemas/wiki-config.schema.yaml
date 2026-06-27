@@ -48,6 +48,11 @@ properties:
       node_version:
         type: string
         default: "20"
+      platform:
+        type: string
+        default: github
+        enum: [github, forgejo, gitea]
+        description: Controls the workflow directory (.github/workflows, .forgejo/workflows, .gitea/workflows).
     additionalProperties: false
   arch:
     type: object

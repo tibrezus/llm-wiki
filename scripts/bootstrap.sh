@@ -90,6 +90,7 @@ PROJECT_DESCRIPTION=$(read_config project.description)
 PROJECT_URL=$(read_config_default project.url "")
 CI_RUNNER=$(read_config_default ci.runner "ubuntu-latest")
 CI_NODE=$(read_config_default ci.node_version "20")
+CI_PLATFORM=$(read_config_default ci.platform "github")
 QMD_GLOBAL=$(read_config qmd.global_context)
 QMD_ENTITY=$(read_config_default qmd.entity_context "")
 QMD_CONCEPT=$(read_config_default qmd.concept_context "")
@@ -113,7 +114,7 @@ generate_gitignore "$INSTANCE_ROOT"
 generate_remarkrc "$INSTANCE_ROOT"
 generate_package_json "$INSTANCE_ROOT" "$PROJECT_TITLE"
 generate_qmd_yml "$INSTANCE_ROOT" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUIDE" "$QMD_REFERENCE"
-generate_ci_workflow "$INSTANCE_ROOT" "$CI_RUNNER" "$CI_NODE"
+generate_ci_workflow "$INSTANCE_ROOT" "$CI_RUNNER" "$CI_NODE" "$CI_PLATFORM"
 
 # --- Create wiki directory structure ---
 info "Creating wiki directories..."
