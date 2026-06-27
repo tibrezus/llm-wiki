@@ -343,6 +343,32 @@ Use ` ```text ` for file trees, procedures, pseudo-code, templates — not diagr
 
 ---
 
+## Commit and Verify
+
+A wiki change is **not done** when the local files are written. It is done
+only when it is **committed, pushed to the remote, and CI is green**.
+
+Local validation (`npm run check`) is necessary but not sufficient — it does
+not catch submodule drift, tool-version differences, or environment-specific
+failures. Only the remote CI run is authoritative.
+
+The workflow, end to end:
+
+1. Write the change locally.
+2. `npm run check` — fast local gate (catches obvious mistakes early).
+3. Commit and **push** to the remote.
+4. **Watch the CI run** and confirm it is green. If it fails, fix and push
+   again until it is green.
+5. Only then is the change considered complete.
+
+Use the right tool for the remote — they are NOT interchangeable:
+
+- **GitHub** repos: use **`gh`** (`gh run watch`, `gh run list`).
+- **Forgejo** repos: use **`fj`** (`fj actions tasks`, `fj actions jobs`).
+
+Determine the platform from the remote URL before pushing, and use the
+corresponding tool to watch CI. Do not assume — check.
+
 ## Validation Checklist
 
 Before committing any wiki change:
@@ -362,3 +388,8 @@ Before committing any wiki change:
       RIG**
 - [ ] **`raw/arch/<project>.rig.json` existed before architecture diagrams
       were written** (no RIG = no architecture workflow)
+
+After committing:
+
+- [ ] **Pushed** to the remote
+- [ ] **CI run watched** to green (via `gh` for GitHub, `fj` for Forgejo)
