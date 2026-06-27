@@ -158,12 +158,8 @@ jobs:
         with:
           node-version: "${node_version}"
 
-      - name: Install pyyaml
-        run: |
-          if ! python3 -c 'import yaml' 2>/dev/null; then
-            python3 -m pip install --user pyyaml 2>/dev/null \\
-              || python3 -m pip install --break-system-packages pyyaml
-          fi
+      - name: Install python deps (pyyaml)
+        run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
 
       - name: Install npm dependencies
         run: npm ci 2>/dev/null || npm install
@@ -189,12 +185,8 @@ jobs:
         with:
           node-version: "${node_version}"
 
-      - name: Install pyyaml
-        run: |
-          if ! python3 -c 'import yaml' 2>/dev/null; then
-            python3 -m pip install --user pyyaml 2>/dev/null \\
-              || python3 -m pip install --break-system-packages pyyaml
-          fi
+      - name: Install python deps (pyyaml)
+        run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
 
       - name: Run index pipeline
         run: bash .llm-wiki/scripts/ci-index.sh
@@ -220,10 +212,8 @@ EOF
         with:
           submodules: true
 
-      - name: Install pyyaml + jsonschema
-        run: |
-          python3 -m pip install --user pyyaml jsonschema 2>/dev/null \\
-            || python3 -m pip install --break-system-packages pyyaml jsonschema
+      - name: Install python deps (pyyaml + jsonschema)
+        run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml jsonschema
 
       - name: Fetch + validate RIG graphs
         run: bash .llm-wiki/scripts/arch/ci-arch.sh
