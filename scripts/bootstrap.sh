@@ -110,6 +110,17 @@ generate_pre_commit "$INSTANCE_ROOT" "$INSTANCE_ROOT/.llm-wiki"
 
 # --- Generate files (always regenerated from config) ---
 info "Generating files..."
+
+# Remove stale workflow directories from a previous platform before
+# regenerating. Only the configured platform's directory should survive.
+case "$CI_PLATFORM" in
+    forgejo) rm -rf "$INSTANCE_ROOT/.github/workflows" "$INSTANCE_ROOT/.gitea/workflows" ;;
+    gitea)   rm -rf "$INSTANCE_ROOT/.github/workflows" "$INSTANCE_ROOT/.forgejo/workflows" ;;
+    *)       rm -rf "$INSTANCE_ROOT/.forgejo/workflows" "$INSTANCE_ROOT/.gitea/workflows" ;;
+esac
+# Also remove now-empty platform dirs if left behind
+rmdir "$INSTANCE_ROOT/.github" "$INSTANCE_ROOT/.forgejo" "$INSTANCE_ROOT/.gitea" 2>/dev/null || true
+
 generate_gitignore "$INSTANCE_ROOT"
 generate_remarkrc "$INSTANCE_ROOT"
 generate_package_json "$INSTANCE_ROOT" "$PROJECT_TITLE"

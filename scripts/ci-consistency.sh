@@ -51,6 +51,14 @@ case "$CI_PLATFORM" in
 esac
 
 GENERATED_FILES=('.gitignore' '.remarkrc.mjs' 'package.json' 'qmd.yml' "${WARECASE_PATH}")
+
+# Workflow directories for every platform. Only the configured platform's
+# directory should exist; the others are stale leftovers from a platform
+# switch and must be removed (a stray wiki-ci.yml in the wrong directory
+# would either be ignored by the runner or, worse, run with the wrong action URLs).
+ALL_WF_DIRS=('.github/workflows' '.forgejo/workflows' '.gitea/workflows')
+ACTIVE_WF_DIR="$(dirname "$WARECASE_PATH")"
+
 # Files to compare (copied from submodule)
 COPIED_FILES=('AGENTS.md' '.markdownlint.yaml' '.pre-commit-config.yaml')
 SUBMODULE_DIR="$INSTANCE_ROOT/.llm-wiki"
@@ -111,6 +119,18 @@ for file in "${COPIED_FILES[@]}"; do
         FAILED=1
     else
         echo "  OK: $file"
+    fi
+done
+
+echo ""
+echo "--- Stale Workflow Directories ---"
+for wf_dir in "${ALL_WF_DIRS[@]}"; do
+    if [ "$wf_dir" = "$ACTIVE_WF_DIR" ]; then
+        continue
+    fi
+    if [ -e "$INSTANCE_ROOT/$wf_dir" ]; then
+        echo "  STALE: $wf_dir/ (platform is $CI_PLATFORM; remove with 'rm -rf $wf_dir')"
+        FAILED=1
     fi
 done
 
