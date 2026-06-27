@@ -145,9 +145,6 @@ jobs:
               || python3 -m pip install --break-system-packages pyyaml
           fi
 
-      - name: Install lint tools
-        run: bash .llm-wiki/scripts/lib/install-tools.sh && export PATH="\$HOME/.local/bin:\$PATH"
-
       - name: Install npm dependencies
         run: npm ci 2>/dev/null || npm install
 
@@ -155,9 +152,7 @@ jobs:
         run: bash .llm-wiki/scripts/ci-consistency.sh
 
       - name: Lint pipeline
-        run: |
-          export PATH="\$HOME/.local/bin:\$PATH"
-          bash .llm-wiki/scripts/ci-lint.sh
+        run: bash .llm-wiki/scripts/ci-lint.sh
 
   index:
     name: QMD Index Health
@@ -173,13 +168,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "${node_version}"
-
-      - name: Install pyyaml
-        run: |
-          if ! python3 -c 'import yaml' 2>/dev/null; then
-            python3 -m pip install --user pyyaml 2>/dev/null \\
-              || python3 -m pip install --break-system-packages pyyaml
-          fi
 
       - name: Run index pipeline
         run: bash .llm-wiki/scripts/ci-index.sh
