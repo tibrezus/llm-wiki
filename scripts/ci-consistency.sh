@@ -35,7 +35,7 @@ generate_gitignore "$TMPDIR"
 generate_remarkrc "$TMPDIR"
 generate_package_json "$TMPDIR" "$PROJECT_TITLE"
 generate_qmd_yml "$TMPDIR" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUIDE" "$QMD_REFERENCE"
-generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE"
+generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE" "$CI_PLATFORM"
 
 # Files to compare (generated from config)
 # Determine the workflow directory from the platform config.
