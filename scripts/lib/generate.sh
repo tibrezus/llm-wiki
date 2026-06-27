@@ -114,6 +114,26 @@ generate_ci_workflow() {
     esac
     mkdir -p "$wf_dir"
 
+    # Action URLs differ per platform:
+    #   github  -> actions/checkout@v4 (resolves from github.com)
+    #   forgejo -> https://code.forgejo.org/actions/checkout@v4
+    #   gitea   -> https://gitea.com/actions/checkout@v4
+    local checkout_action setup_node_action
+    case "$platform" in
+        forgejo)
+            checkout_action="https://code.forgejo.org/actions/checkout@v4"
+            setup_node_action="https://code.forgejo.org/actions/setup-node@v4"
+            ;;
+        gitea)
+            checkout_action="https://gitea.com/actions/checkout@v4"
+            setup_node_action="https://gitea.com/actions/setup-node@v4"
+            ;;
+        *)
+            checkout_action="actions/checkout@v4"
+            setup_node_action="actions/setup-node@v4"
+            ;;
+    esac
+
     cat > "$wf_dir/wiki-ci.yml" <<EOF
 name: Wiki CI
 
@@ -129,12 +149,12 @@ jobs:
     runs-on: ${runner}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: ${checkout_action}
         with:
           submodules: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: ${setup_node_action}
         with:
           node-version: "${node_version}"
 
@@ -160,12 +180,12 @@ jobs:
     needs: lint
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: ${checkout_action}
         with:
           submodules: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: ${setup_node_action}
         with:
           node-version: "${node_version}"
 
@@ -189,7 +209,7 @@ EOF
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: ${checkout_action}
         with:
           submodules: true
 
