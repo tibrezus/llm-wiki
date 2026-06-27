@@ -17,6 +17,7 @@ echo "=== Consistency Check ==="
 PROJECT_TITLE=$(read_config project.title)
 CI_RUNNER=$(read_config_default ci.runner "ubuntu-latest")
 CI_NODE=$(read_config_default ci.node_version "20")
+CI_PLATFORM=$(read_config_default ci.platform "github")
 QMD_GLOBAL=$(read_config qmd.global_context)
 QMD_ENTITY=$(read_config_default qmd.entity_context "")
 QMD_CONCEPT=$(read_config_default qmd.concept_context "")
@@ -38,8 +39,9 @@ generate_qmd_yml "$TMPDIR" "$QMD_GLOBAL" "$QMD_ENTITY" "$QMD_CONCEPT" "$QMD_GUID
 generate_ci_workflow "$TMPDIR" "$CI_RUNNER" "$CI_NODE" "$CI_PLATFORM"
 
 # Files to compare (generated from config)
-# Determine the workflow directory from the platform config.
 CI_PLATFORM=$(read_config_default ci.platform "github")
+
+# Determine the workflow directory from the platform config.
 WF_PATH=
 WARECASE_PATH=".github/workflows/wiki-ci.yml"
 case "$CI_PLATFORM" in
