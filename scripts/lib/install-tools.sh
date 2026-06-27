@@ -12,13 +12,38 @@ install_node_tools() {
 
 install_python_tools() {
     echo "::group::Install Python tools"
-    # Ensure pyyaml is available (needed by config.sh read_config)
-    if ! python3 -c 'import yaml' 2>/dev/null; then
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --break-system-packages 2>/dev/null
-        python3 -m pip install --break-system-packages pyyaml 2>/dev/null
+    _TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    _SCRIPTS_DIR="$(dirname "$_TOOLS_DIR")"
+
+    # 1) pyyaml via the portable installer (pip / apt / dnf / apk / get-pip).
+    bash "$_SCRIPTS_DIR/install-python-deps.sh" pyyaml
+
+    # 2) mdlint-obsidian needs pip. Some runners ship system Python without
+    #    pip ('No module named pip'), so bootstrap it from get-pip.py first.
+    if ! python3 -m pip --version >/dev/null 2>&1; then
+        echo "[install-tools] pip missing; bootstrapping via get-pip.py"
+        if command -v curl >/dev/null 2>&1 \
+           && curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py 2>/dev/null; then
+            python3 /tmp/get-pip.py --user --break-system-packages 2>/dev/null \
+              || python3 /tmp/get-pip.py --user 2>/dev/null \
+              || python3 /tmp/get-pip.py 2>/dev/null \
+              || true
+        fi
     fi
-    python3 -m pip install --break-system-packages mdlint-obsidian 2>/dev/null \
-        || pip3 install mdlint-obsidian 2>/dev/null
+
+    # 3) Install mdlint-obsidian (the lint pipeline needs the 'mdlint' binary).
+    #    Try several pip invocation styles; only fail if none work.
+    if python3 -m pip --version >/dev/null 2>&1; then
+        python3 -m pip install --user --break-system-packages mdlint-obsidian 2>/dev/null \
+          || python3 -m pip install --user mdlint-obsidian 2>/dev/null \
+          || python3 -m pip install --break-system-packages mdlint-obsidian 2>/dev/null \
+          || python3 -m pip install mdlint-obsidian 2>/dev/null \
+          || pip3 install --user mdlint-obsidian 2>/dev/null \
+          || { echo "::error::Failed to install mdlint-obsidian via pip"; exit 1; }
+    else
+        echo "::error::pip unavailable after bootstrap; cannot install mdlint-obsidian"
+        exit 1
+    fi
     echo "::endgroup::"
 }
 
