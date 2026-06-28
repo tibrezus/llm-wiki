@@ -27,7 +27,10 @@ generate_pre_commit() {
 
 generate_gitignore() {
     local dest="$1"
-    echo "node_modules/" > "$dest/.gitignore"
+    cat > "$dest/.gitignore" <<'EOF'
+node_modules/
+.obsidian/
+EOF
 }
 
 generate_remarkrc() {
