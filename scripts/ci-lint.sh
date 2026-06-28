@@ -57,7 +57,7 @@ fi
 echo ""
 echo "--- likec4 model validation ---"
 # Validate LikeC4 (.c4) model files in raw/arch/
-C4_FILES=$(find raw/arch -name '*.c4' 2>/dev/null)
+C4_FILES=$(find raw/arch -name '*.c4' 2>/dev/null || true)
 if [ -n "$C4_FILES" ]; then
     likec4 format --check raw/arch/ 2>&1 || {
         echo "::error::LikeC4 model validation failed"
