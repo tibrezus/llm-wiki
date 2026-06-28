@@ -45,8 +45,27 @@ def main():
             for idx, block in extract_mermaid_blocks(md_path):
                 total += 1
                 block_file.write_text(block)
+                # Try to find the chrome binary installed by puppeteer
+                chrome_path = os.environ.get("PUPPETEER_EXECUTABLE_PATH", "")
+                if not chrome_path:
+                    # Search common puppeteer cache locations
+                    cache_dirs = [
+                        os.path.expanduser("~/.cache/puppeteer"),
+                        "/root/.cache/puppeteer",
+                    ]
+                    for cd in cache_dirs:
+                        if os.path.isdir(cd):
+                            for root, dirs, files in os.walk(cd):
+                                if "chrome" in files and os.access(os.path.join(root, "chrome"), os.X_OK):
+                                    chrome_path = os.path.join(root, "chrome")
+                                    break
+                            if chrome_path:
+                                break
+                env = os.environ.copy()
+                if chrome_path:
+                    env["PUPPETEER_EXECUTABLE_PATH"] = chrome_path
                 cmd = [
-                    "npx", "mmdc",
+                    "mmdc",
                     "-i", str(block_file),
                     "-o", str(out_svg),
                     "--quiet",
@@ -58,6 +77,7 @@ def main():
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=env,
                 )
                 if result.returncode != 0:
                     failed += 1

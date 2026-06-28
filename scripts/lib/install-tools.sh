@@ -73,8 +73,14 @@ install_mermaid_cli() {
     echo "::group::Install Mermaid CLI"
     npm install -g @mermaid-js/mermaid-cli 2>/dev/null || npm install -g @mermaid-js/mermaid-cli
     # Ensure Chromium is installed for Puppeteer (mmdc uses it to render)
-    # This installs the browser binary into the puppeteer cache.
     npx puppeteer browsers install chrome 2>/dev/null || true
+    # Install Chrome system dependencies (needed on minimal CI runners)
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 \
+            libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
+            libpango-1.0-0 libcairo2 libasound2 2>/dev/null || true
+    fi
     echo "::endgroup::"
 }
 
