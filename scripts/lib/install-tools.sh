@@ -72,6 +72,9 @@ install_likec4() {
 install_mermaid_cli() {
     echo "::group::Install Mermaid CLI"
     npm install -g @mermaid-js/mermaid-cli 2>/dev/null || npm install -g @mermaid-js/mermaid-cli
+    # Ensure Chromium is installed for Puppeteer (mmdc uses it to render)
+    # This installs the browser binary into the puppeteer cache.
+    npx puppeteer browsers install chrome 2>/dev/null || true
     echo "::endgroup::"
 }
 
