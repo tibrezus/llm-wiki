@@ -260,6 +260,9 @@ project repo.
 5. **Tell the human** to add the project to the wiki's `arch:` config with the
    Release asset URL as `rig_url`. From that point, the wiki CI will fetch and
    commit the RIG, and C4D2 unlocks.
+6. **After the first RIG lands** in `raw/arch/<project>.rig.json`, run the
+   `arch-sync` command to write the initial LikeC4 model (`.c4`) from the RIG
+   and generate the Mermaid architecture diagrams.
 
 ### `wiki prune <topic>`
 
@@ -344,7 +347,9 @@ only when it is **committed, pushed to the remote, and CI is green**.
 
 Local validation (`npm run check`) is necessary but not sufficient — it does
 not catch submodule drift, tool-version differences, or environment-specific
-failures. Only the remote CI run is authoritative.
+failures. CI also validates diagrams (Mermaid render-checked via `mmdc`,
+LikeC4 models via `likec4 format --check`) that local checks do not. Only the
+remote CI run is authoritative.
 
 The workflow, end to end:
 
