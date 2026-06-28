@@ -43,6 +43,32 @@ fi
 echo "OK"
 
 echo ""
+echo "--- mermaid diagram validation ---"
+# Extract every ```mermaid block from wiki pages and render-check it with mmdc.
+# Catches broken Mermaid syntax before it ships.
+MERMAID_FAILED=0
+MERMAID_COUNT=$(python3 "$SCRIPT_DIR/validate-mermaid.py" wiki/ "$INSTANCE_ROOT/.llm-wiki/scripts/lib/puppeteer-config.json" 2>&1) || MERMAID_FAILED=1
+echo "$MERMAID_COUNT"
+if [ "$MERMAID_FAILED" -eq 1 ]; then
+    echo "::error::Mermaid diagram validation failed"
+    exit 1
+fi
+
+echo ""
+echo "--- likec4 model validation ---"
+# Validate LikeC4 (.c4) model files in raw/arch/
+C4_FILES=$(find raw/arch -name '*.c4' 2>/dev/null)
+if [ -n "$C4_FILES" ]; then
+    likec4 format --check raw/arch/ 2>&1 || {
+        echo "::error::LikeC4 model validation failed"
+        exit 1
+    }
+    echo "OK ($(echo "$C4_FILES" | wc -l) model file(s))"
+else
+    echo "OK (no .c4 files)"
+fi
+
+echo ""
 echo "--- raw/ immutability ---"
 # raw/ holds curated source documents that must NEVER be modified once placed.
 # The single exception is raw/arch/ — that subdirectory holds CI-fetched /

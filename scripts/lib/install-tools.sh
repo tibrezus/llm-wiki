@@ -63,10 +63,24 @@ install_qmd() {
     echo "::endgroup::"
 }
 
+install_likec4() {
+    echo "::group::Install LikeC4"
+    npm install -g likec4 2>/dev/null || npm install -g likec4
+    echo "::endgroup::"
+}
+
+install_mermaid_cli() {
+    echo "::group::Install Mermaid CLI"
+    npm install -g @mermaid-js/mermaid-cli 2>/dev/null || npm install -g @mermaid-js/mermaid-cli
+    echo "::endgroup::"
+}
+
 install_all_lint_tools() {
     install_node_tools
     install_python_tools
     install_remark_deps
+    install_likec4
+    install_mermaid_cli
 }
 
 configure_path() {

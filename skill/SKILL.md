@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: "Operate on an LLM Wiki knowledge base — a persistent, compounding artifact maintained by LLM agents. Supports two documentation workflows: Generic (Mermaid diagrams, raw-source inputs) and Architecture/C4D2 (D2 diagrams, code-graph-driven C4 model). Commands: read, update, create, prune, list, arch-sync. Use when the user asks to look something up, update wiki content, add/remove pages, sync architecture diagrams from a code graph, or get an overview of the knowledge base."
+description: "Operate on an LLM Wiki knowledge base — a persistent, compounding artifact maintained by LLM agents. Supports two documentation workflows: Generic (Mermaid diagrams, raw-source inputs) and Architecture/C4D2 (LikeC4 models → Mermaid, code-graph-driven C4). Commands: read, update, create, prune, list, arch-sync. Use when the user asks to look something up, update wiki content, add/remove pages, sync architecture diagrams from a code graph, or get an overview of the knowledge base."
 ---
 
 # LLM Wiki Skill
@@ -60,7 +60,7 @@ READMEs, conversations, design docs).
 > **⚠ CRITICAL: The RIG JSON is the ONLY source of truth. NEVER write
 > architecture diagrams from memory. ⚠**
 >
-> Every component, dependency, and boundary in a C4/D2 diagram MUST be
+> Every component, dependency, and boundary in a C4 diagram MUST be
 > traceable to a specific node in `raw/arch/<project>.rig.json`. Your training
 > data about the project is IRRELEVANT — the RIG is what's real.
 >
@@ -84,16 +84,18 @@ Do not invent architecture from memory.
   JSON, a deterministic, evidence-backed architectural map produced by the
   project's CI. Small enough to read whole (1–15K tokens). You read it directly
   — no rollup, no budgeting, no intermediate processing.
-- **Diagrams**: **D2 exclusively**. D2's inter-diagram dependencies (nested
-  shapes, multi-board linking) make the C4 zoom hierarchy work
-  (Context → Container → Component → Code as nested/linked boards). No Mermaid
-  for C4 diagrams.
-- **CI validation**: CI validates every D2 block compiles.
+- **Model**: **LikeC4 DSL** (`raw/arch/<project>.c4`). You write a typed C4
+  model derived from the RIG. LikeC4 enforces C4 structure by construction.
+- **Diagrams**: **Mermaid** (generated from the LikeC4 model via
+  `likec4 gen mermaid`). Each LikeC4 view becomes one Mermaid diagram.
+- **CI validation**: `likec4 format --check` validates the C4 model.
+  Mermaid blocks are render-checked with `mmdc`.
 
 **C4 level assignment is the LLM's job** — but only as **interpretation of the
-RIG**, never as replacement. You assign C4 levels to **RIG components**; you
-do not invent entities that aren't in the RIG. If the RIG shows something
-unexpected, draw what the RIG shows.
+RIG**, never as replacement. You translate RIG components into LikeC4 model
+elements (systems, containers, components) and define views at each C4 level.
+You do not invent entities that aren't in the RIG. If the RIG shows something
+unexpected, model what the RIG shows.
 
 **C4 ↔ RIG mapping:**
 
@@ -184,7 +186,7 @@ Create a new wiki page.
 
 ### `wiki arch-sync <project>`
 
-Sync architecture diagrams from an updated RIG (Architecture/C4D2 workflow).
+Sync architecture model and diagrams from an updated RIG (Architecture/C4D2 workflow).
 Run when `raw/arch/<project>.rig.json` has changed.
 
 > **⚠ Every diagram you produce MUST be derived from the RIG. NEVER write
@@ -204,24 +206,15 @@ Run when `raw/arch/<project>.rig.json` has changed.
 3. **Read the RIG**: `cat raw/arch/<project>.rig.json`. This is a deterministic
    JSON — read it whole. Identify components, their types, dependencies
    (`depends_on_ids`), external packages, and entrypoints.
-4. **Re-derive C4 levels from the RIG**: assign RIG components to Context /
-   Container / Component / Code. Every shape in your D2 diagram must correspond
-   to a real entry in the RIG. **Do not include anything that is not in the
-   RIG.**
-5. **Update D2 figures** in the pages that explain each topic. Use D2's nested
-   shapes for C4 containment and cross-board links for the zoom hierarchy.
-   The pattern (in a `d2` fenced block):
-
-   - Top-level shapes = Context level (entrypoints + external packages)
-   - Nested shapes inside a system = Container level (executables)
-   - Nested shapes inside a container = Component level (packages)
-   - Nested shapes inside a component = Code level (source files)
-
-   D2 only — never Mermaid for C4 diagrams.
-6. **Update `sources:`** with `raw/arch/<project>.rig.json` (makes the
-   derivation traceable).
-7. **Update `index.md`** and **append to `log.md`** with operation `arch-sync`.
-8. **Validate**: `npm run check` (CI will also validate D2 compiles).
+4. **Update the LikeC4 model** (`raw/arch/<project>.c4`). Translate RIG
+   components into typed C4 elements. Every element must correspond to a real
+   entry in the RIG. **Do not include anything that is not in the RIG.**
+5. **Regenerate Mermaid** — `likec4 gen mermaid -o /tmp/out raw/arch/`.
+6. **Update wiki pages** — replace the embedded Mermaid blocks with the
+   regenerated output.
+7. **Update `sources:`** with `raw/arch/<project>.rig.json`.
+8. **Update `index.md`** and **append to `log.md`** with operation `arch-sync`.
+9. **Validate**: `npm run check` (CI also validates the LikeC4 model).
 
 ### `wiki consult <project-repo-path>`
 
@@ -311,11 +304,12 @@ Summarize the wiki contents.
 ## Diagram Rules by Workflow
 
 | Workflow | Tool | When | CI checks |
-|----------|------|------|-----------|
-| Generic Documentation | **Mermaid only** | documenting from raw sources | markdown + mermaid validity |
-| Architecture (C4D2) | **D2 only** | documenting from a code graph | D2 compiles |
+|----------|------|------|----------|
+| Generic Documentation | **Mermaid only** | documenting from raw sources | markdown + mermaid render validity |
+| Architecture (C4D2) | **LikeC4 → Mermaid** | documenting from a code graph | C4 model validity + mermaid render |
 
-Never mix: no D2 in generic docs, no Mermaid for C4 architecture diagrams.
+Never mix: no LikeC4 models in generic docs, no hand-written Mermaid for C4
+architecture diagrams (generate from the model).
 
 ### Mermaid type guide (Generic)
 
@@ -332,14 +326,14 @@ Never mix: no D2 in generic docs, no Mermaid for C4 architecture diagrams.
 
 Use ` ```text ` for file trees, procedures, pseudo-code, templates — not diagrams.
 
-### D2 C4 guide (Architecture)
+### LikeC4 C4 guide (Architecture)
 
-| C4 Level | Scope | D2 technique |
-|----------|-------|-------------|
-| Context | whole system + actors | top-level shapes; link to Container boards |
-| Container | one project | nested inside Context; link to Component boards |
-| Component | one module | nested inside Container; link to Code boards |
-| Code | few files | source files from a component in `<project>.rig.json` |
+| C4 Level | Scope | LikeC4 element/view |
+|----------|-------|---------------------|
+| Context | whole system + actors | `system` elements; `view` with `include *` |
+| Container | one project | `container` in `system`; `view of <system>` |
+| Component | one module | `component` in `container`; `view of <container>` |
+| Code | few files | `component` details; `view of <component>` |
 
 ---
 
@@ -381,8 +375,8 @@ Before committing any wiki change:
 - [ ] `index.md` updated, `log.md` appended
 - [ ] Bidirectional links maintained
 - [ ] No `#` body headings, no inline HTML, no markdown links for internal refs
-- [ ] Generic workflow pages: Mermaid only (no D2)
-- [ ] Architecture pages: D2 only (no Mermaid); D2 compiles
+- [ ] Generic workflow pages: Mermaid only (no LikeC4 models)
+- [ ] Architecture pages: Mermaid generated from LikeC4 model; model validates
 - [ ] **Architecture diagrams derived from `raw/arch/` RIG — NOT from memory**
 - [ ] **Every component/dependency in architecture diagrams is traceable to the
       RIG**
