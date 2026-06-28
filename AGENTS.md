@@ -26,7 +26,7 @@ frontmatter rules, entity types, and two documentation workflows:
 - **Workflow 1 — Generic Documentation**: documents anything from raw sources
   (articles, READMEs, conversations). Diagrams in **Mermaid only**. Wiki CI
   validates markdown + mermaid render validity.
-- **Workflow 2 — Architecture Documentation (C4D2)**: documents a project's
+- **Workflow 2 — Architecture Documentation (LC4)**: documents a project's
   code structure from a deterministic RIG graph. Architecture models written
   in **LikeC4 DSL**, exported to **Mermaid** for rendering. CI validates the
   C4 model with `likec4 format --check`.

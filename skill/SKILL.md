@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: "Operate on an LLM Wiki knowledge base — a persistent, compounding artifact maintained by LLM agents. Supports two documentation workflows: Generic (Mermaid diagrams, raw-source inputs) and Architecture/C4D2 (LikeC4 models → Mermaid, code-graph-driven C4). Commands: read, update, create, prune, list, arch-sync. Use when the user asks to look something up, update wiki content, add/remove pages, sync architecture diagrams from a code graph, or get an overview of the knowledge base."
+description: "Operate on an LLM Wiki knowledge base — a persistent, compounding artifact maintained by LLM agents. Supports two documentation workflows: Generic (Mermaid diagrams, raw-source inputs) and Architecture/LC4 (LikeC4 models → Mermaid, code-graph-driven C4). Commands: read, update, create, prune, list, arch-sync. Use when the user asks to look something up, update wiki content, add/remove pages, sync architecture diagrams from a code graph, or get an overview of the knowledge base."
 ---
 
 # LLM Wiki Skill
@@ -55,7 +55,7 @@ READMEs, conversations, design docs).
   content.
 - **CI validation**: wiki CI validates markdown + mermaid syntax.
 
-### Workflow 2: Architecture Documentation (C4D2)
+### Workflow 2: Architecture Documentation (LC4)
 
 > **⚠ CRITICAL: The RIG JSON is the ONLY source of truth. NEVER write
 > architecture diagrams from memory. ⚠**
@@ -186,7 +186,7 @@ Create a new wiki page.
 
 ### `wiki arch-sync <project>`
 
-Sync architecture model and diagrams from an updated RIG (Architecture/C4D2 workflow).
+Sync architecture model and diagrams from an updated RIG (Architecture/LC4 workflow).
 Run when `raw/arch/<project>/rig.json` has changed.
 
 > **⚠ Every diagram you produce MUST be derived from the RIG. NEVER write
@@ -218,7 +218,7 @@ Run when `raw/arch/<project>/rig.json` has changed.
 
 ### `wiki consult <project-repo-path>`
 
-Help a project set up RIG graph generation (promotion to C4D2). Inspects the
+Help a project set up RIG graph generation (promotion to LC4). Inspects the
 project repo, determines its language and build system, generates a CI
 workflow that uses the reusable repo-map Action, and writes it into the
 project repo.
@@ -259,7 +259,7 @@ project repo.
    deterministically publish `repo-map.json` as a Release asset on every tag.
 5. **Tell the human** to add the project to the wiki's `arch:` config with the
    Release asset URL as `rig_url`. From that point, the wiki CI will fetch and
-   commit the RIG, and C4D2 unlocks.
+   commit the RIG, and LC4 unlocks.
 6. **After the first RIG lands** in `raw/arch/<project>/rig.json`, run the
    `arch-sync` command to write the initial LikeC4 model (`.c4`) from the RIG
    and generate the Mermaid architecture diagrams.
@@ -309,7 +309,7 @@ Summarize the wiki contents.
 | Workflow | Tool | When | CI checks |
 |----------|------|------|----------|
 | Generic Documentation | **Mermaid only** | documenting from raw sources | markdown + mermaid render validity |
-| Architecture (C4D2) | **LikeC4 → Mermaid** | documenting from a code graph | C4 model validity + mermaid render |
+| Architecture (LC4) | **LikeC4 → Mermaid** | documenting from a code graph | C4 model validity + mermaid render |
 
 Never mix: no LikeC4 models in generic docs, no hand-written Mermaid for C4
 architecture diagrams (generate from the model).

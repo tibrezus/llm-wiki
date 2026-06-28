@@ -8,7 +8,7 @@ set -euo pipefail
 #   2. validate it against schemas/repo-map.schema.yaml
 #   3. write it verbatim to raw/arch/<name>.rig.json
 #
-# The RIG JSON is the single source of truth for the LLM-authored C4D2
+# The RIG JSON is the single source of truth for the LLM-authored LC4
 # diagrams. It is committed to raw/ (immutable). No transformation, no
 # rollup, no extraction — the project owns graph generation entirely.
 

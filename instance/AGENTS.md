@@ -222,7 +222,7 @@ pseudo-code, command output, and templates** — those are not graphs.
 
 ---
 
-### Workflow 2: Architecture Documentation (C4D2)
+### Workflow 2: Architecture Documentation (LC4)
 
 > **⚠ CRITICAL — READ THIS BEFORE DOING ANYTHING IN THIS WORKFLOW ⚠**
 >

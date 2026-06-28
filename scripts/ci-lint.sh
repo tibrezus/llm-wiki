@@ -84,7 +84,7 @@ echo "--- raw/ immutability ---"
 # raw/ holds curated source documents that must NEVER be modified once placed.
 # The single exception is raw/arch/ — that subdirectory holds CI-fetched /
 # agent-regenerated Repository Intelligence Graphs (RIG JSONs) used by the
-# C4D2 architecture workflow. RIGs are intentionally refreshed over time, so
+# LC4 architecture workflow. RIGs are intentionally refreshed over time, so
 # they are exempt from the immutability rule.
 #
 # This check only runs on pull/merge requests. PR/MR checkouts (actions/
