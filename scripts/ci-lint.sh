@@ -56,16 +56,27 @@ fi
 
 echo ""
 echo "--- likec4 model validation ---"
-# Validate LikeC4 (.c4) model files in raw/arch/
-C4_FILES=$(find raw/arch -name '*.c4' 2>/dev/null || true)
-if [ -n "$C4_FILES" ]; then
-    likec4 format --check raw/arch/ 2>&1 || {
-        echo "::error::LikeC4 model validation failed"
-        exit 1
-    }
-    echo "OK ($(echo "$C4_FILES" | wc -l) model file(s))"
+# Validate LikeC4 (.c4) model files. Each project lives in its own
+# directory under raw/arch/<project>/, so we run likec4 per-project.
+C4_COUNT=0
+LIKEC4_FAILED=0
+while IFS= read -r c4file; do
+    [ -z "$c4file" ] && continue
+    C4_COUNT=$((C4_COUNT + 1))
+    c4dir=$(dirname "$c4file")
+    echo "  checking $c4file"
+    if ! likec4 format --check "$c4dir" 2>&1; then
+        echo "::error::LikeC4 model validation failed for $c4file"
+        LIKEC4_FAILED=1
+    fi
+done < <(find raw/arch -mindepth 2 -name 'model.c4' 2>/dev/null || true)
+if [ "$LIKEC4_FAILED" -eq 1 ]; then
+    exit 1
+fi
+if [ "$C4_COUNT" -gt 0 ]; then
+    echo "OK ($C4_COUNT model file(s))"
 else
-    echo "OK (no .c4 files)"
+    echo "OK (no .c4 model files)"
 fi
 
 echo ""

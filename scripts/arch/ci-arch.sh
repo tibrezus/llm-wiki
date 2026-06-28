@@ -43,7 +43,9 @@ while IFS=$'\x1f' read -r NAME RIG_URL; do
     [ -n "$NAME" ] || continue
     echo ""
     echo "=== Project: $NAME ==="
-    OUT="$RAW_ARCH/$NAME.rig.json"
+    PROJECT_DIR="$RAW_ARCH/$NAME"
+    mkdir -p "$PROJECT_DIR"
+    OUT="$PROJECT_DIR/rig.json"
 
     [ -n "$RIG_URL" ] || { echo "::error::$NAME: rig_url is required"; FAILED=1; continue; }
 

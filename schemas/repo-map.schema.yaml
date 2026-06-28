@@ -2,7 +2,7 @@
 #
 # The contract between a project and the wiki. The project's CI produces a
 # RIG JSON conforming to this schema and publishes it; the wiki fetches it,
-# validates against this schema, and commits it verbatim to raw/arch/.
+# validates against this schema, and commits it verbatim to raw/arch/<project>/rig.json.
 #
 # Based on the RIG standard (arXiv:2601.10112, github.com/Greenfuze/Spade).
 # Adapted to JSON Schema (yaml) for the llm-wiki module's validator.
