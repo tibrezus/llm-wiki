@@ -251,7 +251,6 @@ ${ARCH_TOKEN_ENV}
           fi
 EOF
     fi
-    CONFIG_FILE="$prev_cfg"
 }
 
 generate_index() {
