@@ -209,9 +209,11 @@ EOF
 import yaml
 with open('$dest/wiki.config.yml') as f:
     c = yaml.safe_load(f) or {}
+seen = set()
 for p in (c.get('arch') or {}).get('projects') or []:
     env = p.get('rig_token_env', '')
-    if env:
+    if env and env not in seen:
+        seen.add(env)
         print('          ' + env + ': \${{ secrets.' + env + ' }}')
 " 2>/dev/null || true)
         fi
