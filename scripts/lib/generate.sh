@@ -197,17 +197,17 @@ EOF
 
     # The arch job is emitted only when the instance declares arch.projects.
     local prev_cfg="${CONFIG_FILE:-}"
-    if [ -f "$dest/wiki.config.yml" ]; then
-        CONFIG_FILE="$dest/wiki.config.yml"
-    fi
+    # config.sh sets CONFIG_FILE to the real repo root (instance root), which
+    # is what we must read from even when generating into a temp dir (the
+    # consistency check generates into TMPDIR, which has no wiki.config.yml).
     if command -v config_has >/dev/null 2>&1 && config_has arch.projects; then
         # Build env lines for private-project tokens (rig_token_env values).
         # Each maps the CI secret to an env var of the same name.
         ARCH_TOKEN_ENV=""
-        if [ -f "$dest/wiki.config.yml" ]; then
+        if [ -f "$CONFIG_FILE" ]; then
             ARCH_TOKEN_ENV=$(python3 -c "
 import yaml
-with open('$dest/wiki.config.yml') as f:
+with open('$CONFIG_FILE') as f:
     c = yaml.safe_load(f) or {}
 seen = set()
 for p in (c.get('arch') or {}).get('projects') or []:
