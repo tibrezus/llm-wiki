@@ -196,7 +196,6 @@ jobs:
 EOF
 
     # The arch job is emitted only when the instance declares arch.projects.
-    local prev_cfg="${CONFIG_FILE:-}"
     # config.sh sets CONFIG_FILE to the real repo root (instance root), which
     # is what we must read from even when generating into a temp dir (the
     # consistency check generates into TMPDIR, which has no wiki.config.yml).
