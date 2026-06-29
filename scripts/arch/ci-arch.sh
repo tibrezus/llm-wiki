@@ -39,7 +39,7 @@ fi
 FAILED=0
 
 # Iterate projects (unit-separator delimited so empty fields survive).
-while IFS=$'\x1f' read -r NAME RIG_URL; do
+while IFS=$'\x1f' read -r NAME RIG_URL TOKEN_ENV; do
     [ -n "$NAME" ] || continue
     echo ""
     echo "=== Project: $NAME ==="
@@ -49,8 +49,22 @@ while IFS=$'\x1f' read -r NAME RIG_URL; do
 
     [ -n "$RIG_URL" ] || { echo "::error::$NAME: rig_url is required"; FAILED=1; continue; }
 
+    # For private project repos, rig_token_env names a CI secret whose value
+    # is injected into the environment under the same name by the runner.
+    # Works for GitHub PATs and Forgejo tokens alike (same auth header).
+    CURL_AUTH=()
+    if [ -n "$TOKEN_ENV" ]; then
+        TOKEN_VALUE="${!TOKEN_ENV:-}"
+        if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::$NAME: rig_token_env '$TOKEN_ENV' is not set in CI"
+            FAILED=1
+            continue
+        fi
+        CURL_AUTH=(-H "Authorization: token $TOKEN_VALUE")
+    fi
+
     echo "fetching RIG from $RIG_URL"
-    if ! curl -fsSL "$RIG_URL" -o "$OUT"; then
+    if ! curl -fsSL "${CURL_AUTH[@]}" "$RIG_URL" -o "$OUT"; then
         echo "::error::$NAME: failed to fetch RIG from $RIG_URL"
         FAILED=1
         continue
@@ -71,7 +85,7 @@ import yaml
 with open('$CONFIG_FILE') as f:
     c = yaml.safe_load(f) or {}
 for p in (c.get('arch') or {}).get('projects') or []:
-    print('\x1f'.join([p.get('name',''), p.get('rig_url','')]))
+    print('\x1f'.join([p.get('name',''), p.get('rig_url',''), p.get('rig_token_env','')]))
 ")
 
 echo ""

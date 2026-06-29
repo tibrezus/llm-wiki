@@ -201,6 +201,20 @@ EOF
         CONFIG_FILE="$dest/wiki.config.yml"
     fi
     if command -v config_has >/dev/null 2>&1 && config_has arch.projects; then
+        # Build env lines for private-project tokens (rig_token_env values).
+        # Each maps the CI secret to an env var of the same name.
+        ARCH_TOKEN_ENV=""
+        if [ -f "$dest/wiki.config.yml" ]; then
+            ARCH_TOKEN_ENV=$(python3 -c "
+import yaml
+with open('$dest/wiki.config.yml') as f:
+    c = yaml.safe_load(f) or {}
+for p in (c.get('arch') or {}).get('projects') or []:
+    env = p.get('rig_token_env', '')
+    if env:
+        print('          ' + env + ': \${{ secrets.' + env + ' }}')
+" 2>/dev/null || true)
+        fi
         cat >> "$wf_dir/wiki-ci.yml" <<EOF
 
   arch:
@@ -219,6 +233,8 @@ EOF
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml jsonschema
 
       - name: Fetch + validate RIG graphs
+        env:
+${ARCH_TOKEN_ENV}
         run: bash .llm-wiki/scripts/arch/ci-arch.sh
 
       - name: Commit updated raw/arch artifacts

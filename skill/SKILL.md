@@ -257,10 +257,16 @@ project repo.
 3. **Write the workflow** into `<project-repo-path>/.github/workflows/repo-map.yml`.
 4. **Open a PR** in the project repo. After merge, the project will
    deterministically publish `repo-map.json` as a Release asset on every tag.
-5. **Tell the human** to add the project to the wiki's `arch:` config with the
-   Release asset URL as `rig_url`. From that point, the wiki CI will fetch and
-   commit the RIG, and LC4 unlocks.
-6. **After the first RIG lands** in `raw/arch/<project>/rig.json`, run the
+5. **If the project repo is private**, create a read-scoped token (fine-grained
+   PAT on GitHub, or an access token on Forgejo) and store it as a CI secret in
+   the **wiki** repo: `gh secret set <PROJECT>_RIG_TOKEN` (GitHub) or the
+   equivalent in Forgejo. Then declare it in the wiki's `arch:` config as
+   `rig_token_env: <PROJECT>_RIG_TOKEN` alongside `rig_url`. Public repos skip
+   this step.
+6. **Tell the human** to add the project to the wiki's `arch:` config with the
+   Release asset URL as `rig_url` (and `rig_token_env` if private). From that
+   point, the wiki CI will fetch and commit the RIG, and LC4 unlocks.
+7. **After the first RIG lands** in `raw/arch/<project>/rig.json`, run the
    `arch-sync` command to write the initial LikeC4 model (`.c4`) from the RIG
    and generate the Mermaid architecture diagrams.
 

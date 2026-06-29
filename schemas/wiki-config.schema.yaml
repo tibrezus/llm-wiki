@@ -73,6 +73,9 @@ properties:
               type: string
               minLength: 1
               description: HTTPS URL where the project publishes its RIG JSON (GitHub Release asset).
+            rig_token_env:
+              type: string
+              description: Name of the CI secret holding a read token for the project repo (private projects only). The named env var is injected by the runner from the repo/org secret.
           additionalProperties: false
     additionalProperties: false
 additionalProperties: false

@@ -341,8 +341,12 @@ A project enters this workflow by producing and publishing a **RIG JSON**:
   adds only a one-job workflow that calls the Action — no scripts, no config.
 - **Name** — `<project>.rig.json`, matching the `name` in the wiki's `arch:`
   config.
-- **Exposure** — published as a GitHub Release asset (stable, public URL).
-  Declared in the wiki as `rig_url: <url>` in `arch:`.
+- **Exposure** — published as a GitHub Release asset (stable URL). Declared in
+  the wiki as `rig_url: <url>` in `arch:`. For **private project repos**, add
+  `rig_token_env: <SECRET_NAME>` — the name of a CI secret (read-scoped token
+  on the project repo) that the wiki runner injects to authenticate the fetch.
+  The agent creates that secret in the wiki repo during `consult` using the
+  same credentials it already holds for both repos. Public repos need no token.
 
 #### Multi-project
 
