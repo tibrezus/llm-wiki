@@ -239,6 +239,7 @@ ${ARCH_TOKEN_ENV}
         run: bash .llm-wiki/scripts/arch/ci-arch.sh
 
       - name: Commit updated raw/arch artifacts
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
           git config user.name  "llm-wiki-arch-bot"
           git config user.email "actions@noreply.example.com"
