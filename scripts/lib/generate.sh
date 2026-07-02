@@ -216,6 +216,13 @@ for p in (c.get('arch') or {}).get('projects') or []:
         print('          ' + env + ': \${{ secrets.' + env + ' }}')
 " 2>/dev/null || true)
         fi
+        # Only emit an `env:` block when there are private-project tokens;
+        # an empty `env:` key is invalid YAML that breaks the workflow parse.
+        ARCH_ENV_BLOCK=""
+        if [ -n "$ARCH_TOKEN_ENV" ]; then
+            ARCH_ENV_BLOCK="        env:
+$ARCH_TOKEN_ENV"
+        fi
         cat >> "$wf_dir/wiki-ci.yml" <<EOF
 
   arch:
@@ -234,8 +241,7 @@ for p in (c.get('arch') or {}).get('projects') or []:
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml jsonschema
 
       - name: Fetch + validate RIG graphs
-        env:
-${ARCH_TOKEN_ENV}
+${ARCH_ENV_BLOCK}
         run: bash .llm-wiki/scripts/arch/ci-arch.sh
 
       - name: Commit updated raw/arch artifacts
