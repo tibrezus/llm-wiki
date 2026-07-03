@@ -157,7 +157,7 @@ for item in data['items']:
     fi
     # For SSH URLs (codeberg.org, etc.), configure git to use the mounted key
     if echo "$DST_WIKI" | grep -q '^ssh://'; then
-        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
+        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes"
     fi
     git clone --depth 1 --branch "$DST_BRANCH" "$WIKI_URL_AUTH" "$WIKI_DIR" 2>/dev/null || {
         log "  ERROR: cannot clone wiki repo"
