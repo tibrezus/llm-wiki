@@ -27,6 +27,14 @@ ENV GOPATH="/go"
 ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
 RUN mkdir -p "${GOPATH}"
 
+# Zig (for emit-zig.sh)
+ARG ZIG_VERSION=0.14.1
+RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
+        -o /tmp/zig.tar.xz \
+    && tar -xf /tmp/zig.tar.xz -C /usr/local \
+    && ln -s /usr/local/zig-x86_64-linux-${ZIG_VERSION}/zig /usr/local/bin/zig \
+    && rm /tmp/zig.tar.xz
+
 # pi.dev harness + LikeC4
 RUN npm install -g @earendil-works/pi-coding-agent likec4
 
@@ -34,12 +42,13 @@ RUN npm install -g @earendil-works/pi-coding-agent likec4
 COPY deploy/scripts/reconcile.sh         /usr/local/bin/reconcile.sh
 COPY deploy/scripts/agent-sync.sh        /usr/local/bin/agent-sync.sh
 COPY .github/actions/repo-map/emit-go.sh /emitters/emit-go.sh
+COPY .github/actions/repo-map/emit-zig.sh /emitters/emit-zig.sh
 COPY schemas/repo-map.schema.yaml        /schema/repo-map.schema.yaml
 COPY scripts/arch/validate-rig.py        /usr/local/bin/validate-rig.py
 
 # The llm-wiki skill (for the pi agent to follow)
 COPY skill/SKILL.md                      /skills/wiki/SKILL.md
 
-RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /emitters/emit-go.sh
+RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /emitters/emit-go.sh /emitters/emit-zig.sh
 
 ENTRYPOINT ["/usr/local/bin/reconcile.sh"]

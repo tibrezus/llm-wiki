@@ -34,3 +34,23 @@ spec:
                 {{- end }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
+              {{- if .Values.sshKey.enabled }}
+              volumeMounts:
+                - name: ssh-key
+                  mountPath: /root/.ssh
+                  readOnly: true
+              {{- end }}
+          {{- if .Values.sshKey.enabled }}
+          volumes:
+            - name: ssh-key
+              projected:
+                sources:
+                  - secret:
+                      name: {{ .Values.sshKey.secretName }}
+                      items:
+                        - key: id_ed25519
+                          path: id_ed25519
+                          mode: 0600
+                  - configMap:
+                      name: {{ include "llm-wiki-controller.fullname" . }}-known-hosts
+          {{- end }}

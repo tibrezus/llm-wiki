@@ -152,7 +152,12 @@ for item in data['items']:
     log "  cloning wiki repo…"
     WIKI_URL_AUTH="$DST_WIKI"
     if [ -n "${LLM_WIKI_GITHUB_TOKEN:-}" ] && echo "$DST_WIKI" | grep -q 'github.com'; then
+        # GitHub HTTPS auth via token
         WIKI_URL_AUTH=$(echo "$DST_WIKI" | sed "s|https://github.com|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com|; s|git@github.com:|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com/|")
+    fi
+    # For SSH URLs (codeberg.org, etc.), configure git to use the mounted key
+    if echo "$DST_WIKI" | grep -q '^ssh://'; then
+        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
     fi
     git clone --depth 1 --branch "$DST_BRANCH" "$WIKI_URL_AUTH" "$WIKI_DIR" 2>/dev/null || {
         log "  ERROR: cannot clone wiki repo"

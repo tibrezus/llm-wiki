@@ -36,5 +36,15 @@ resources:
     cpu: "2"
     memory: 2Gi
 
+# SSH key for pushing to non-GitHub wikis (Codeberg, Forgejo, etc.).
+# Mounts a k8s secret containing an SSH private key at ~/.ssh/id_ed25519.
+sshKey:
+  enabled: false
+  secretName: ""
+
+# Known hosts entries for SSH git push (codeberg.org, etc.).
+# When sshKey.enabled is true, these are written to ~/.ssh/known_hosts.
+knownHosts: []
+
 # Extra environment variables injected into the CronJob.
 extraEnv: []
