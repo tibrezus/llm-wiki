@@ -99,9 +99,10 @@ print('success')
 "
             ;;
         forgejo)
-            # Forgejo Actions API: list workflow runs for this SHA
+            # Forgejo Actions API: list workflow tasks
+            # The tasks endpoint returns runs with head_sha + status.
             curl -sf -H "$AUTH_HEADER" \
-                "$API_BASE/actions/runs?sha=$COMMIT_SHA" | \
+                "$API_BASE/actions/tasks" | \
                 python3 -c "
 import json, sys
 try:
@@ -109,13 +110,17 @@ try:
 except:
     print('pending'); sys.exit()
 runs = data.get('workflow_runs', [])
-if not runs:
-    # Try tasks endpoint as fallback
+# Filter by commit SHA prefix
+sha_prefix = '${COMMIT_SHA:0:10}'
+matched = [r for r in runs if r.get('head_sha', '').startswith(sha_prefix)]
+if not matched:
     print('pending'); sys.exit()
-pending = [r for r in runs if r.get('status') != 'completed']
+# Check if all runs for this SHA are complete
+pending = [r for r in matched if r.get('status') not in ('success', 'failure', 'cancelled', 'skipped')]
 if pending:
     print('pending'); sys.exit()
-failed = [r for r in runs if r.get('conclusion') not in ('success', 'skipped', None)]
+# Check if any failed
+failed = [r for r in matched if r.get('status') not in ('success', 'skipped')]
 if failed:
     print('failed'); sys.exit()
 print('success')
