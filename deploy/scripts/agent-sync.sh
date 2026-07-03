@@ -84,7 +84,7 @@ cd "$WIKI_DIR"
 # --skill: load the llm-wiki skill
 # --approve: trust the wiki files (no confirmation prompts)
 # --model: use GLM-5.2 via ZAI
-timeout 600 pi --print \
+timeout 1800 pi --print \
     --skill /skills/wiki/SKILL.md \
     --model "$MODEL" \
     --approve \
