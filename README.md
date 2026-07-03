@@ -1,200 +1,222 @@
 # llm-wiki
 
-A shared tooling module for [LLM Wiki](./llm-wiki.md) instances — the persistent, compounding knowledge base pattern for LLM agents.
+A shared tooling module for **LLM Wiki** instances — persistent, compounding
+knowledge bases maintained by LLM agents. This repository provides three layers:
 
-This repository is used as a **git submodule** inside wiki instances. It provides linting, testing, CI pipelines, and the wiki schema so that structure, correctness, and tooling are maintained centrally and shared across projects.
+1. **Wiki tooling** — schema, lint, CI pipelines, bootstrap, health checks
+2. **GitOps controller** — Kubernetes-native RIG generation + LLM agent pipeline
+3. **Agent skill** — the `llm-wiki` skill for the pi.dev harness
 
-## What's Included
+## Architecture
 
-| Component | Path | Purpose |
-|-----------|------|---------|
-| Module Guide | `AGENTS.md` | How to maintain this tooling module (scripts, schemas, CI, bootstrap) |
-| Wiki Schema | `instance/AGENTS.md` | The instance schema — page format, frontmatter, workflows (copied into each instance's root `AGENTS.md`) |
-| Pattern Document | `llm-wiki.md` | The original LLM Wiki idea document |
-| Page Frontmatter Schema | `schemas/wiki-page.schema.yaml` | JSON Schema for wiki page YAML frontmatter |
-| Config Schema | `schemas/wiki-config.schema.yaml` | JSON Schema for `wiki.config.yml` |
-| Health Checker | `scripts/wiki-health.py` | Structural validation (orphans, bidirectional links, type/directory match, etc.) |
-| Config Validator | `scripts/validate-config.py` | Validates `wiki.config.yml` against schema |
-| Consistency Check | `scripts/ci-consistency.sh` | Detects drift between generated files and current config |
-| QMD Setup | `scripts/qmd-setup.sh` | Search engine setup reading from `wiki.config.yml` |
-| CI Lint Pipeline | `scripts/ci-lint.sh` | Full lint pipeline (markdownlint, mdlint-obsidian, remark, health check) |
-| CI Index Pipeline | `scripts/ci-index.sh` | QMD index build, embed, health verification |
-| Bootstrap Script | `scripts/bootstrap.sh` | Initialize a new wiki instance with interactive prompts |
-| New Wiki Script | `scripts/new-wiki.sh` | One-command creation of a brand-new instance (init + submodule + bootstrap) |
-| Reusable Lint Workflow | `.github/workflows/lint.yml` | GitHub Actions reusable workflow for lint + consistency |
-| Reusable Index Workflow | `.github/workflows/index.yml` | GitHub Actions reusable workflow for QMD indexing |
-| Shared Config Reader | `scripts/lib/config.sh` | `read_config()`, `require_config()`, `require_submodule()` |
-| Shared Generators | `scripts/lib/generate.sh` | File generators (package.json, qmd.yml, CI workflow, etc.) |
-| Shared Tool Installer | `scripts/lib/install-tools.sh` | `install_all_lint_tools()`, `install_qmd()`, etc. |
-| Markdown Lint | `.markdownlint.yaml` | Shared markdown formatting rules |
-| Pre-Commit Hooks | `.pre-commit-config.yaml` | Automated validation on every commit |
-| Tests | `tests/test_wiki_health.py` | Unit tests for wiki-health.py check functions |
+```
+┌─ Module (this repo) ──────────────────────────────────────────┐
+│                                                               │
+│  Wiki Tooling          GitOps Controller        Agent Skill    │
+│  ─────────────         ─────────────────        ───────────    │
+│  instance/AGENTS.md    deploy/chart/            skill/SKILL.md │
+│  schemas/              deploy/scripts/                         │
+│  scripts/              Dockerfile                               │
+│  tests/                .github/actions/repo-map/               │
+│                                                               │
+│  Used by wiki           Used by k8s-config      Used by pi     │
+│  instances (submodule)  (Helm chart)            (--skill)      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Operator pattern separation
+
+- **This module** owns **build logic**: how to generate RIGs, validate diagrams,
+  transform inputs into documentation. Ships the Helm chart + scripts + Dockerfile.
+- **k8s-config** owns **runtime logic**: which repos map to which wikis
+  (WikiMap CR instances), Flux sources, secrets, network policies.
+
+## Two Documentation Workflows
+
+Every wiki instance supports two workflows:
+
+| Workflow | Diagrams | RIG | LLM command | When to use |
+|----------|----------|-----|-------------|-------------|
+| **LC4** (Architecture) | LikeC4 → Mermaid | Yes | `arch-sync` | Documenting a project's architecture from code |
+| **Generic** | Mermaid only | No | `update` | Documenting concepts, guides, reference from raw sources |
+
+## GitOps RIG Pipeline
+
+The controller runs in Kubernetes and automatically generates documentation:
+
+```
+Project push → Flux sources artifact → CronJob reconciles WikiMap CRs:
+
+  LC4 workflow:                     Generic workflow:
+  1. emit-<lang>.sh → rig.json      1. copy source → raw/<project>/
+  2. push rig.json to wiki          2. push to wiki
+  3. LLM: arch-sync (GLM-5.2)      3. LLM: update (GLM-5.2)
+     → model.c4 + Mermaid              → wiki pages + Mermaid
+```
+
+WikiMap CR examples:
+
+```yaml
+# LC4 (architecture docs)
+apiVersion: llm-wiki.dev/v1alpha1
+kind: WikiMap
+spec:
+  workflow: lc4
+  source:
+    repo: https://github.com/me/my-service
+    language: go
+  destination:
+    wikiRepo: git@github.com:me/my-wiki.git
+    projectDir: raw/arch/my-service
+
+# Generic (general docs)
+apiVersion: llm-wiki.dev/v1alpha1
+kind: WikiMap
+spec:
+  workflow: generic
+  source:
+    repo: https://github.com/me/my-docs
+  destination:
+    wikiRepo: git@github.com:me/my-wiki.git
+    projectDir: raw/my-docs
+```
+
+## File Layout
+
+```text
+├── AGENTS.md                       # Module maintenance guide (this context)
+├── README.md                       # This file
+├── instance/AGENTS.md              # Wiki schema (copied into instances)
+├── skill/SKILL.md                  # Agent skill (synced to ~/.agents/skills/wiki/)
+├── llm-wiki.md                     # Founding pattern document
+│
+├── schemas/
+│   ├── wiki-page.schema.yaml       # Frontmatter JSON Schema
+│   ├── wiki-config.schema.yaml     # wiki.config.yml JSON Schema
+│   └── repo-map.schema.yaml        # RIG JSON Schema
+│
+├── scripts/                        # Wiki instance tooling
+│   ├── bootstrap.sh                # Generate/regenerate an instance from config
+│   ├── new-wiki.sh                 # One-command instance creation
+│   ├── ci-lint.sh                  # Lint pipeline (markdown + mermaid + likec4)
+│   ├── ci-index.sh                 # QMD index build + verify
+│   ├── ci-consistency.sh           # Drift check (generated vs config)
+│   ├── validate-config.py          # Validate wiki.config.yml
+│   ├── validate-mermaid.py         # Render-check mermaid blocks with mmdc
+│   ├── wiki-health.py              # Orphans, bidirectional links, type/dir
+│   ├── arch/
+│   │   ├── ci-arch.sh              # Fetch + validate RIG (legacy CI mode)
+│   │   └── validate-rig.py         # Validate RIG against schema
+│   └── lib/
+│       ├── config.sh               # read_config(), require_config()
+│       ├── generate.sh             # File generators (CI, package.json, etc.)
+│       ├── install-tools.sh        # Tool installer (likec4, mmdc, etc.)
+│       └── puppeteer-config.json   # Headless Chromium config for mmdc
+│
+├── deploy/                         # GitOps controller (Helm chart + scripts)
+│   ├── chart/                      # The operator Helm chart
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml
+│   │   └── templates/
+│   │       ├── crd-wikimap.yaml    # WikiMap CRD (llm-wiki.dev/v1alpha1)
+│   │       ├── cronjob.yaml        # Reconciliation CronJob
+│   │       ├── role.yaml           # RBAC (read wikimaps + gitrepositories)
+│   │       ├── rolebinding.yaml
+│   │       ├── serviceaccount.yaml
+│   │       └── _helpers.tpl
+│   └── scripts/
+│       ├── reconcile.sh            # Deterministic: download → emit/copy → push
+│       ├── agent-sync.sh           # Interpretive: LLM (GLM-5.2) → docs update
+│       └── add-wikimap.sh          # One-command project onboarding
+│
+├── Dockerfile                      # Controller image (Go + Python3 + Node22 + pi + likec4)
+│
+├── .github/actions/repo-map/       # RIG emitters (also used as standalone GitHub Action)
+│   ├── action.yml                  # Composite Action dispatch
+│   ├── emit-go.sh                  # Go RIG emitter (go list -json)
+│   └── emit-zig.sh                 # Zig RIG emitter (build.zig + build.zig.zon parsing)
+│
+├── tests/
+│   └── test_wiki_health.py         # Unit tests for wiki-health.py
+│
+├── .markdownlint.yaml              # Shared markdown rules
+├── .pre-commit-config.yaml         # Pre-commit hooks
+├── .remarkrc.mjs                   # remark config (module self-lint)
+└── package.json                    # npm: lint, test, check
+```
 
 ## Quick Start
 
-Create a new wiki instance with a single command:
+### Create a new wiki instance
 
 ```bash
 bash /path/to/llm-wiki/scripts/new-wiki.sh my-wiki
-# or, without a local clone of the module:
-curl -fsSL https://raw.githubusercontent.com/tibrezus/llm-wiki/main/scripts/new-wiki.sh \
-  | bash -s my-wiki
 ```
 
-`new-wiki.sh` creates `my-wiki/`, `git init`s it, adds this module as the
-`.llm-wiki` submodule, then runs `bootstrap.sh`. Alternatively, if the submodule
-is already added:
+Or manually:
 
 ```bash
+mkdir my-wiki && cd my-wiki
+git init && git switch -c main
 git submodule add https://github.com/tibrezus/llm-wiki.git .llm-wiki
+# Edit wiki.config.yml, then:
 bash .llm-wiki/scripts/bootstrap.sh
 ```
 
-The bootstrap script will:
+### Add a project to the GitOps pipeline
 
-- Prompt for project name, description, QMD contexts, and CI runner
-- Create `wiki.config.yml` with project-specific configuration
-- Generate symlinks to shared lint configs
-- Generate `.remarkrc.mjs`, `package.json`, `qmd.yml`, `README.md`
-- Generate `.github/workflows/wiki-ci.yml` using the module's reusable workflows
-- Create `wiki/` directory structure (`entities/`, `concepts/`, `guides/`, `reference/`)
-- Install npm dependencies and pre-commit hooks
+```bash
+# In k8s-config, run the add-wikimap helper:
+/path/to/llm-wiki/deploy/scripts/add-wikimap.sh my-service \
+  https://github.com/me/my-service go --push
 
-## Instance CI
-
-The generated CI workflow calls the module's reusable workflows:
-
-```yaml
-# Generated .github/workflows/wiki-ci.yml
-jobs:
-  lint:
-    uses: tibrezus/llm-wiki/.github/workflows/lint.yml@main
-    with:
-      runner: self-hosted
-      node-version: "20"
-
-  index:
-    uses: tibrezus/llm-wiki/.github/workflows/index.yml@main
-    needs: lint
-    with:
-      runner: self-hosted
-      node-version: "20"
+# Or for generic documentation:
+/path/to/llm-wiki/deploy/scripts/add-wikimap.sh my-docs \
+  https://github.com/me/my-docs --workflow generic --push
 ```
 
-The lint workflow runs:
+### Develop the module
 
-1. **Consistency check** — verifies generated files match current `wiki.config.yml` and symlinks are correct
-2. **Config validation** — validates `wiki.config.yml` against schema
+```bash
+npm run check    # lint + test
+npm run lint     # markdownlint only
+npm run test     # pytest only
+```
+
+## CI Validation (Wiki Instances)
+
+The wiki CI validates every push:
+
+1. **Consistency** — generated files match config
+2. **Config** — `wiki.config.yml` valid against schema
 3. **markdownlint** — markdown formatting
 4. **mdlint-obsidian** — wikilinks, frontmatter, embeds
 5. **remark** — frontmatter schema validation
-6. **Unique filenames** — no duplicates across wiki/
-7. **Raw/ immutability** — raw/ files not modified in PRs
-8. **Wiki health check** — orphans, bidirectional links, type/directory match, stale pages
+6. **Mermaid** — every `mermaid` block render-checked with mmdc
+7. **LikeC4** — every `.c4` model validated with `likec4 format --check`
+8. **Unique filenames** — no duplicates across `wiki/`
+9. **Raw/ immutability** — `raw/` not modified in PRs
+10. **Wiki health** — orphans, bidirectional links, type/dir match
 
-The index workflow runs:
+## Propagation
 
-1. **QMD setup** — collection + context from config
-2. **Index + embed** — build search index
-3. **Verify + search test** — confirm index health
-
-When the module's CI scripts are updated, all instances get the changes on their next CI run (the reusable workflow is fetched from `@main`). The consistency check catches instances that need to re-run bootstrap.
-
-## Instance Structure
-
-After bootstrapping, a wiki instance looks like this:
-
-```text
-my-wiki/
-├── .llm-wiki/                          # This module (git submodule)
-│   ├── AGENTS.md                       # Module maintenance guide
-│   ├── instance/AGENTS.md              # Wiki schema (copied to instance root)
-│   ├── llm-wiki.md                     # Pattern document
-│   ├── schemas/                        # Frontmatter + config schemas
-│   └── scripts/                        # Health check, CI pipelines, setup
-├── AGENTS.md                     # Copied from .llm-wiki/instance/AGENTS.md
-├── .markdownlint.yaml            # Copied from .llm-wiki/.markdownlint.yaml
-├── .pre-commit-config.yaml       # Copied from .llm-wiki/.pre-commit-config.yaml
-├── .gitignore                          # Generated (git can't read symlinked gitignore)
-├── .remarkrc.mjs                       # Generated (references .llm-wiki/schemas/)
-├── wiki.config.yml                     # Project-specific configuration
-├── package.json                        # npm dev dependencies
-├── qmd.yml                             # QMD search config
-├── .github/workflows/wiki-ci.yml       # CI (calls module's reusable workflows)
-├── wiki/                               # Wiki content (instance-owned)
-│   ├── entities/
-│   ├── concepts/
-│   ├── guides/
-│   └── reference/
-├── raw/                                # Immutable source documents
-├── index.md                            # Page catalog
-├── log.md                              # Activity log
-└── README.md                           # Project readme
-```
-
-## Updating Shared Tooling
-
-When this module is updated, all instances get the changes:
+When the module changes, propagate to all instances:
 
 ```bash
-cd my-wiki
-cd .llm-wiki && git pull origin main && cd ..
-bash .llm-wiki/scripts/bootstrap.sh   # refresh copied/generated files
-git add -A
-git commit -m "chore: update llm-wiki submodule + regenerate"
+cd <instance>
+git -C .llm-wiki pull origin main
+bash .llm-wiki/scripts/bootstrap.sh
+git add -A && git commit -m "chore: bump submodule" && git push
+# Watch CI: gh run watch (GitHub) or fj actions tasks (Forgejo/Codeberg)
 ```
 
-Copied files (`AGENTS.md` from `.llm-wiki/instance/AGENTS.md`, plus `.markdownlint.yaml` and `.pre-commit-config.yaml` from the module root) are refreshed by re-running bootstrap.
-
-```text
-Run 'bash .llm-wiki/scripts/bootstrap.sh' to regenerate drifted files.
-```
-
-Re-running bootstrap regenerates files from config while preserving content (`wiki/`, `raw/`, `index.md`, `log.md`).
-
-## Project Configuration
-
-Each instance defines its project context in `wiki.config.yml`, validated against `schemas/wiki-config.schema.yaml`:
-
-```yaml
-project:
-  name: my-project          # required, lowercase hyphen-separated
-  title: My Project         # required
-  description: ...          # required
-  url: https://...          # optional
-
-qmd:
-  global_context: "..."     # required, min 10 chars
-  entity_context: "..."     # optional
-  concept_context: "..."    # optional
-  guide_context: "..."      # optional
-  reference_context: "..."  # optional
-
-ci:
-  runner: ubuntu-latest     # optional, default ubuntu-latest
-  node_version: "20"        # optional, default "20"
-```
-
-## Validation Tools
-
-| Tool | Purpose | Install |
-|------|---------|---------|
-| markdownlint-cli2 | Markdown formatting | `npm install -g markdownlint-cli2` |
-| mdlint-obsidian | Wikilinks, frontmatter, embeds | `pip install mdlint-obsidian` |
-| remark-lint-frontmatter-schema | Frontmatter JSON Schema validation | `npm ci` |
-| qmd | Local search engine (BM25 + vector + reranking) | `npm install -g @tobilu/qmd` |
-
-Run all checks locally: `npm run check`
-
-## Development
+For the controller image: rebuild and push:
 
 ```bash
-# Lint the module itself
-npm run lint
-
-# Run tests
-npm run test
-
-# Full check
-npm run check
+docker build -t ghcr.io/tibrezus/llm-wiki-controller:0.1.0 .
+docker push ghcr.io/tibrezus/llm-wiki-controller:0.1.0
 ```
+
+## License
+
+Open source — see repository for details.
