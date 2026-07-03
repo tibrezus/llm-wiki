@@ -13,7 +13,7 @@ FROM python:3.12-slim-bookworm
 # System tools + kubectl + Node.js
 ARG KUBECTL_VERSION=v1.36.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl ca-certificates git openssh-client jq gnupg \
+        curl ca-certificates git openssh-client jq gnupg xz-utils \
     && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
         -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl \
