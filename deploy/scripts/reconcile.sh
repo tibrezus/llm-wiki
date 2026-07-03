@@ -84,6 +84,7 @@ for item in data['items']:
     dst = spec.get('destination', {})
     print('\t'.join([
         name,
+        spec.get('workflow', 'lc4'),
         src.get('repo', ''),
         src.get('language', ''),
         src.get('branch', 'main'),
@@ -93,9 +94,9 @@ for item in data['items']:
         dst.get('deployKeySecret', 'llm-wiki-deploy-key'),
         status.get('lastProcessedRevision', ''),
     ]))
-" | while IFS=$'\t' read -r NAME SRC_REPO SRC_LANG SRC_BRANCH DST_WIKI DST_BRANCH DST_DIR DEPLOY_SECRET LAST_REV; do
+" | while IFS=$'\t' read -r NAME WORKFLOW SRC_REPO SRC_LANG SRC_BRANCH DST_WIKI DST_BRANCH DST_DIR DEPLOY_SECRET LAST_REV; do
     log "=== $NAME ==="
-    log "  source: $SRC_REPO ($SRC_LANG)"
+    log "  workflow: $WORKFLOW\n  source:   $SRC_REPO ($SRC_LANG)"
     log "  dest:   $DST_WIKI:$DST_BRANCH/$DST_DIR"
 
     # Resolve the source artifact
@@ -140,45 +141,15 @@ for item in data['items']:
         }
     fi
 
-    # Run the emitter
-    EMITTER="$EMITTERS_DIR/emit-${SRC_LANG}.sh"
-    if [ ! -f "$EMITTER" ]; then
-        log "  ERROR: no emitter for language '$SRC_LANG'"
-        patch_status "$NAME" "lastProcessedRevision" "FAILED: no emitter"
-        continue
-    fi
+    # --- Workflow branching ---
+    # LC4: generate RIG from source code, run architecture documentation
+    # Generic: copy source as raw material, run generic documentation update
 
-    RIG_FILE="$WORKDIR/$NAME-rig.json"
-    log "  generating RIG…"
-    (cd "$SRC_DIR" && bash "$EMITTER" "$RIG_FILE") || {
-        log "  ERROR: emitter failed"
-        patch_status "$NAME" "lastProcessedRevision" "FAILED: emitter error"
-        continue
-    }
-
-    # Validate the RIG
-    if [ -f "$SCHEMA" ]; then
-        log "  validating RIG…"
-        python3 -c "
-import json, sys
-with open('$RIG_FILE') as f:
-    rig = json.load(f)
-assert 'components' in rig, 'missing components'
-assert 'repository' in rig, 'missing repository'
-print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packages\",[]))} external')
-" || {
-            log "  ERROR: RIG validation failed"
-            patch_status "$NAME" "lastProcessedRevision" "FAILED: invalid RIG"
-            continue
-        }
-    fi
-
-    RIG_SHA="$(sha256sum "$RIG_FILE" | cut -c1-16)"
-
-    # Clone wiki repo using token auth (HTTPS)
     WIKI_DIR="$WORKDIR/$NAME-wiki"
+    ARTIFACT_SHA=""
+
+    # Clone wiki repo (needed for both workflows)
     log "  cloning wiki repo…"
-    # Inject the GitHub token into the URL for HTTPS auth
     WIKI_URL_AUTH="$DST_WIKI"
     if [ -n "${LLM_WIKI_GITHUB_TOKEN:-}" ] && echo "$DST_WIKI" | grep -q 'github.com'; then
         WIKI_URL_AUTH=$(echo "$DST_WIKI" | sed "s|https://github.com|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com|; s|git@github.com:|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com/|")
@@ -189,36 +160,79 @@ print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packa
         continue
     }
 
-    mkdir -p "$WIKI_DIR/$DST_DIR"
-    cp "$RIG_FILE" "$WIKI_DIR/$DST_DIR/rig.json"
+    if [ "$WORKFLOW" = "lc4" ]; then
+        # --- LC4: generate RIG ---
 
-    # Commit only if changed
+        EMITTER="$EMITTERS_DIR/emit-${SRC_LANG}.sh"
+        if [ ! -f "$EMITTER" ]; then
+            log "  ERROR: no emitter for language '$SRC_LANG'"
+            patch_status "$NAME" "lastProcessedRevision" "FAILED: no emitter"
+            continue
+        fi
+
+        RIG_FILE="$WORKDIR/$NAME-rig.json"
+        log "  generating RIG…"
+        (cd "$SRC_DIR" && bash "$EMITTER" "$RIG_FILE") || {
+            log "  ERROR: emitter failed"
+            patch_status "$NAME" "lastProcessedRevision" "FAILED: emitter error"
+            continue
+        }
+
+        log "  validating RIG…"
+        python3 -c "
+import json
+with open('$RIG_FILE') as f:
+    rig = json.load(f)
+assert 'components' in rig, 'missing components'
+assert 'repository' in rig, 'missing repository'
+print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packages\",[]))} external')
+" || {
+            log "  ERROR: RIG validation failed"
+            patch_status "$NAME" "lastProcessedRevision" "FAILED: invalid RIG"
+            continue
+        }
+
+        ARTIFACT_SHA="$(sha256sum "$RIG_FILE" | cut -c1-16)"
+        mkdir -p "$WIKI_DIR/$DST_DIR"
+        cp "$RIG_FILE" "$WIKI_DIR/$DST_DIR/rig.json"
+
+    elif [ "$WORKFLOW" = "generic" ]; then
+        # --- Generic: copy source as raw material ---
+
+        log "  copying source to $DST_DIR…"
+        mkdir -p "$WIKI_DIR/$DST_DIR"
+        # Copy all files from the source into the wiki raw dir
+        rsync -a --delete --exclude='.git' "$SRC_DIR/" "$WIKI_DIR/$DST_DIR/"
+        ARTIFACT_SHA="$ARTIFACT_REV"
+    fi
+
+    # Commit + push (both workflows)
+    CHANGED=false
     (cd "$WIKI_DIR" && \
-        git add "$DST_DIR/rig.json" && \
-        git diff --cached --quiet && log "  no changes (RIG identical)") || {
+        git add -A && \
+        git diff --cached --quiet && log "  no changes (identical to existing)") || {
         (cd "$WIKI_DIR" && \
-            git -c user.name="llm-wiki-rig-bot" \
-                -c user.email="rig-bot@llm-wiki.dev" \
-                commit -m "chore(arch): auto-update RIG for $NAME " && \
+            git -c user.name="llm-wiki-bot" \
+                -c user.email="wiki-bot@llm-wiki.dev" \
+                commit -m "chore($WORKFLOW): auto-update $NAME" && \
             git push origin "$DST_BRANCH") || {
             log "  ERROR: cannot push to wiki repo"
             patch_status "$NAME" "lastProcessedRevision" "FAILED: push error"
             continue
         }
-        log "  pushed RIG update"
+        CHANGED=true
+        log "  pushed update"
     }
 
     # Update status
     patch_status "$NAME" "lastProcessedRevision" "$ARTIFACT_REV"
-    patch_status "$NAME" "lastRigSha256" "$RIG_SHA"
+    [ -n "$ARTIFACT_SHA" ] && patch_status "$NAME" "lastRigSha256" "$ARTIFACT_SHA"
 
-    # Run the LLM agent step (transforms RIG into documentation)
-    # This is the interpretive step — the agent updates the LikeC4 model,
-    # regenerates Mermaid, and updates wiki pages.
-    if [ -f /usr/local/bin/agent-sync.sh ]; then
-        log "  running agent sync…"
-        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" || {
-            log "  WARN: agent sync failed (non-fatal — RIG was pushed successfully)"
+    # Run the LLM agent step if content changed
+    if $CHANGED && [ -f /usr/local/bin/agent-sync.sh ]; then
+        log "  running agent sync ($WORKFLOW)…"
+        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" || {
+            log "  WARN: agent sync failed (non-fatal)"
         }
     fi
 

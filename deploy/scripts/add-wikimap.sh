@@ -28,17 +28,24 @@ usage() {
     exit 1
 }
 
-[ $# -lt 3 ] && usage
-
+# At least project name + repo URL required. Language optional (3rd arg,
+# only if it doesn't start with -).
+if [ $# -lt 2 ]; then usage; fi
 PROJECT_NAME="$1"
 REPO_URL="$2"
-LANGUAGE="$3"
-shift 3
+LANGUAGE="none"
+shift 2
+# If the next arg is not a flag, it's the language
+if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+    LANGUAGE="$1"
+    shift
+fi
 
 BRANCH="main"
 WIKI_REPO="git@github.com:rezuscloud/llm-wiki.git"
 WIKI_BRANCH="main"
-PROJECT_DIR="raw/arch/${PROJECT_NAME}"
+WORKFLOW="lc4"
+PROJECT_DIR=""
 K8S_CONFIG=""
 DO_PUSH=false
 
@@ -47,6 +54,7 @@ while [ $# -gt 0 ]; do
         --branch)       BRANCH="$2"; shift 2 ;;
         --wiki)         WIKI_REPO="$2"; shift 2 ;;
         --wiki-branch)  WIKI_BRANCH="$2"; shift 2 ;;
+        --workflow)     WORKFLOW="$2"; shift 2 ;;
         --dir)          PROJECT_DIR="$2"; shift 2 ;;
         --k8s-config)   K8S_CONFIG="$2"; shift 2 ;;
         --push)         DO_PUSH=true; shift ;;
@@ -54,11 +62,22 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Validate language
-case "$LANGUAGE" in
-    go|zig|python|rust|typescript) ;;
-    *) echo "Error: unsupported language '$LANGUAGE' (supported: go, zig, python, rust, typescript)"; exit 1 ;;
-esac
+# Validate language (required for lc4, not generic)
+if [ "$WORKFLOW" = "lc4" ]; then
+    case "$LANGUAGE" in
+        go|zig|python|rust|typescript) ;;
+        *) echo "Error: unsupported language '$LANGUAGE' for lc4 workflow"; exit 1 ;;
+    esac
+fi
+
+# Set default project dir based on workflow
+if [ -z "$PROJECT_DIR" ]; then
+    if [ "$WORKFLOW" = "generic" ]; then
+        PROJECT_DIR="raw/${PROJECT_NAME}"
+    else
+        PROJECT_DIR="raw/arch/${PROJECT_NAME}"
+    fi
+fi
 
 # Find k8s-config
 if [ -z "$K8S_CONFIG" ]; then
@@ -90,6 +109,12 @@ if [ -f "$CR_FILE" ]; then
 fi
 
 # Generate the WikiMap CR
+# Build the language line conditionally
+LANG_LINE=""
+if [ "$LANGUAGE" != "none" ]; then
+    LANG_LINE="    language: ${LANGUAGE}"
+fi
+
 cat > "$CR_FILE" << EOF
 apiVersion: llm-wiki.dev/v1alpha1
 kind: WikiMap
@@ -99,10 +124,11 @@ metadata:
   labels:
     app.kubernetes.io/name: llm-wiki
 spec:
+  workflow: ${WORKFLOW}
   source:
     repo: ${REPO_URL}
     branch: ${BRANCH}
-    language: ${LANGUAGE}
+${LANG_LINE}
   destination:
     wikiRepo: ${WIKI_REPO}
     wikiBranch: ${WIKI_BRANCH}

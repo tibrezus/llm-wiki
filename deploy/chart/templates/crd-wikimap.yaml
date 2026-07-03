@@ -18,6 +18,9 @@ spec:
       served: true
       storage: true
       additionalPrinterColumns:
+        - name: Workflow
+          type: string
+          jsonPath: .spec.workflow
         - name: Source
           type: string
           jsonPath: .spec.source.repo
@@ -42,26 +45,37 @@ spec:
               type: object
               required: [source, destination]
               properties:
+                workflow:
+                  type: string
+                  enum: [lc4, generic]
+                  default: lc4
+                  description: >
+                    Documentation workflow. 'lc4' generates a RIG from the
+                    source code and runs architecture documentation (LikeC4 model
+                    + Mermaid). 'generic' treats the source as raw documentation
+                    material (READMEs, articles, configs) and runs generic
+                    documentation updates (Mermaid only).
                 source:
                   type: object
-                  required: [repo, language]
-                  description: The project repository to generate RIGs from.
+                  required: [repo]
+                  description: The project repository to document.
                   properties:
                     repo:
                       type: string
-                      description: Name of the Flux GitRepository CR in this namespace that sources the project, OR a direct git URL.
+                      description: Git URL or Flux GitRepository CR name in this namespace.
                     branch:
                       type: string
                       default: main
-                      description: Branch to track (used when repo is a direct URL; ignored when repo references a GitRepository CR).
                     language:
                       type: string
                       enum: [go, zig, python, rust, typescript]
-                      description: Programming language — selects the emitter script.
+                      description: >
+                        Programming language — selects the RIG emitter.
+                        Required for workflow 'lc4'. Ignored for 'generic'.
                 destination:
                   type: object
                   required: [wikiRepo, projectDir]
-                  description: Where to commit the generated RIG.
+                  description: Where to commit generated artifacts.
                   properties:
                     wikiRepo:
                       type: string
@@ -71,20 +85,16 @@ spec:
                       default: main
                     projectDir:
                       type: string
-                      description: Directory within the wiki repo, e.g. raw/arch/forgejo.
-                    deployKeySecret:
-                      type: string
-                      default: llm-wiki-deploy-key
-                      description: Name of the Secret containing the SSH deploy key for the wiki repo.
+                      description: >
+                        Directory within the wiki repo. For 'lc4': raw/arch/<project>.
+                        For 'generic': raw/<project>.
             status:
               type: object
               properties:
                 lastProcessedRevision:
                   type: string
-                  description: The source artifact revision last processed.
                 lastRigSha256:
                   type: string
-                  description: SHA256 of the last generated RIG (for change detection).
                 lastRunAt:
                   type: string
                   format: date-time
