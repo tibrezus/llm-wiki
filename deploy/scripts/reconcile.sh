@@ -211,6 +211,17 @@ print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packa
     # Update status
     patch_status "$NAME" "lastProcessedRevision" "$ARTIFACT_REV"
     patch_status "$NAME" "lastRigSha256" "$RIG_SHA"
+
+    # Run the LLM agent step (transforms RIG into documentation)
+    # This is the interpretive step — the agent updates the LikeC4 model,
+    # regenerates Mermaid, and updates wiki pages.
+    if [ -f /usr/local/bin/agent-sync.sh ]; then
+        log "  running agent sync…"
+        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" || {
+            log "  WARN: agent sync failed (non-fatal — RIG was pushed successfully)"
+        }
+    fi
+
     log "  DONE ✓"
 done
 
