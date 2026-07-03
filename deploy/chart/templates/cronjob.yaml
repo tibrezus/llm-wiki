@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "llm-wiki-controller.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: llm-wiki-controller
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  schedule: "{{ .Values.schedule }}"
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      timeout: {{ .Values.jobTimeout }}
+      template:
+        spec:
+          serviceAccountName: {{ include "llm-wiki-controller.fullname" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: rig-controller
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: NAMESPACE
+                  value: {{ .Values.namespace | quote }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              volumeMounts:
+                - name: deploy-key
+                  mountPath: /deploy-key
+                  readOnly: true
+          volumes:
+            - name: deploy-key
+              secret:
+                secretName: {{ .Values.deployKeySecret }}
+                defaultMode: 0400

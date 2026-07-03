@@ -1,0 +1,108 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: wikimaps.llm-wiki.dev
+  labels:
+    app.kubernetes.io/name: llm-wiki
+    app.kubernetes.io/component: controller
+spec:
+  group: llm-wiki.dev
+  scope: Namespaced
+  names:
+    plural: wikimaps
+    singular: wikimap
+    kind: WikiMap
+    shortNames: [wm]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Source
+          type: string
+          jsonPath: .spec.source.repo
+        - name: Language
+          type: string
+          jsonPath: .spec.source.language
+        - name: Wiki
+          type: string
+          jsonPath: .spec.destination.wikiRepo
+        - name: Last-Revision
+          type: string
+          jsonPath: .status.lastProcessedRevision
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [source, destination]
+              properties:
+                source:
+                  type: object
+                  required: [repo, language]
+                  description: The project repository to generate RIGs from.
+                  properties:
+                    repo:
+                      type: string
+                      description: Name of the Flux GitRepository CR in this namespace that sources the project, OR a direct git URL.
+                    branch:
+                      type: string
+                      default: main
+                      description: Branch to track (used when repo is a direct URL; ignored when repo references a GitRepository CR).
+                    language:
+                      type: string
+                      enum: [go, zig, python, rust, typescript]
+                      description: Programming language — selects the emitter script.
+                destination:
+                  type: object
+                  required: [wikiRepo, projectDir]
+                  description: Where to commit the generated RIG.
+                  properties:
+                    wikiRepo:
+                      type: string
+                      description: Git URL of the wiki repository.
+                    wikiBranch:
+                      type: string
+                      default: main
+                    projectDir:
+                      type: string
+                      description: Directory within the wiki repo, e.g. raw/arch/forgejo.
+                    deployKeySecret:
+                      type: string
+                      default: llm-wiki-deploy-key
+                      description: Name of the Secret containing the SSH deploy key for the wiki repo.
+            status:
+              type: object
+              properties:
+                lastProcessedRevision:
+                  type: string
+                  description: The source artifact revision last processed.
+                lastRigSha256:
+                  type: string
+                  description: SHA256 of the last generated RIG (for change detection).
+                lastRunAt:
+                  type: string
+                  format: date-time
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: [True, False, Unknown]
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time

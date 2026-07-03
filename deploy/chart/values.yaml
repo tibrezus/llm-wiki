@@ -1,0 +1,36 @@
+# Default values for llm-wiki-controller.
+# These are overridden by k8s-config's HelmRelease values.
+
+# Controller image — the module's Dockerfile.
+image:
+  repository: ghcr.io/tibrezus/llm-wiki-controller
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# The namespace to watch for WikiMap CRs.
+namespace: llm-wiki
+
+# Reconciliation schedule (CronJob format).
+schedule: "*/30 * * * *"
+
+# Job settings.
+concurrencyPolicy: Forbid
+failedJobsHistoryLimit: 3
+successfulJobsHistoryLimit: 1
+jobTimeout: 30m
+
+# RBAC — the controller needs to read/patch WikiMap CRs and read GitRepositories.
+rbac:
+  create: true
+
+# Resource limits for the CronJob pods.
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Deploy key secret name (created by k8s-config via ExternalSecrets).
+deployKeySecret: llm-wiki-deploy-key
