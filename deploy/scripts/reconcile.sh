@@ -175,11 +175,15 @@ print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packa
 
     RIG_SHA="$(sha256sum "$RIG_FILE" | cut -c1-16)"
 
-    # Clone wiki repo, commit RIG, push
+    # Clone wiki repo using token auth (HTTPS)
     WIKI_DIR="$WORKDIR/$NAME-wiki"
     log "  cloning wiki repo…"
-    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -i /deploy-key/sshkey"
-    git clone --depth 1 --branch "$DST_BRANCH" "$DST_WIKI" "$WIKI_DIR" 2>/dev/null || {
+    # Inject the GitHub token into the URL for HTTPS auth
+    WIKI_URL_AUTH="$DST_WIKI"
+    if [ -n "${LLM_WIKI_GITHUB_TOKEN:-}" ] && echo "$DST_WIKI" | grep -q 'github.com'; then
+        WIKI_URL_AUTH=$(echo "$DST_WIKI" | sed "s|https://github.com|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com|; s|git@github.com:|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com/|")
+    fi
+    git clone --depth 1 --branch "$DST_BRANCH" "$WIKI_URL_AUTH" "$WIKI_DIR" 2>/dev/null || {
         log "  ERROR: cannot clone wiki repo"
         patch_status "$NAME" "lastProcessedRevision" "FAILED: wiki clone"
         continue
