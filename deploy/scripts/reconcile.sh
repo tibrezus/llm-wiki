@@ -199,7 +199,7 @@ print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packa
         (cd "$WIKI_DIR" && \
             git -c user.name="llm-wiki-rig-bot" \
                 -c user.email="rig-bot@llm-wiki.dev" \
-                commit -m "chore(arch): auto-update RIG for $NAME [skip ci]" && \
+                commit -m "chore(arch): auto-update RIG for $NAME " && \
             git push origin "$DST_BRANCH") || {
             log "  ERROR: cannot push to wiki repo"
             patch_status "$NAME" "lastProcessedRevision" "FAILED: push error"
