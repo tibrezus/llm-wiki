@@ -24,7 +24,7 @@ runs:
         # dirname $0 is the shell binary, not the action, so it is unreliable here.
         EMITTER="${GITHUB_ACTION_PATH}/emit-${LANGUAGE}.sh"
         if [ ! -f "$EMITTER" ]; then
-          echo "::error::No RIG emitter for language '${LANGUAGE}'. Supported: go, typescript, python, rust."
+          echo "::error::No RIG emitter for language '${LANGUAGE}'. Supported: go, typescript, python, rust, zig."
           echo "Request support at https://github.com/tibrezus/llm-wiki/issues"
           exit 1
         fi
