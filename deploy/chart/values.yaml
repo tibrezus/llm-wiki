@@ -32,5 +32,5 @@ resources:
     cpu: "2"
     memory: 2Gi
 
-# Deploy key secret name (created by k8s-config via ExternalSecrets).
-deployKeySecret: llm-wiki-deploy-key
+# Extra environment variables injected into the CronJob.
+extraEnv: []

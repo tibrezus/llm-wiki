@@ -25,14 +25,8 @@ spec:
               env:
                 - name: NAMESPACE
                   value: {{ .Values.namespace | quote }}
+                {{- with .Values.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
-              volumeMounts:
-                - name: deploy-key
-                  mountPath: /deploy-key
-                  readOnly: true
-          volumes:
-            - name: deploy-key
-              secret:
-                secretName: {{ .Values.deployKeySecret }}
-                defaultMode: 0400
