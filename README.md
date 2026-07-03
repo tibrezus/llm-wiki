@@ -9,7 +9,7 @@ knowledge bases maintained by LLM agents. This repository provides three layers:
 
 ## Architecture
 
-```
+```text
 ┌─ Module (this repo) ──────────────────────────────────────────┐
 │                                                               │
 │  Wiki Tooling          GitOps Controller        Agent Skill    │
@@ -22,7 +22,7 @@ knowledge bases maintained by LLM agents. This repository provides three layers:
 │  Used by wiki           Used by k8s-config      Used by pi     │
 │  instances (submodule)  (Helm chart)            (--skill)      │
 └───────────────────────────────────────────────────────────────┘
-```
+```text
 
 ### Operator pattern separation
 
@@ -44,7 +44,7 @@ Every wiki instance supports two workflows:
 
 The controller runs in Kubernetes and automatically generates documentation:
 
-```
+```text
 Project push → Flux sources artifact → CronJob reconciles WikiMap CRs:
 
   LC4 workflow:                     Generic workflow:
@@ -52,7 +52,7 @@ Project push → Flux sources artifact → CronJob reconciles WikiMap CRs:
   2. push rig.json to wiki          2. push to wiki
   3. LLM: arch-sync (GLM-5.2)      3. LLM: update (GLM-5.2)
      → model.c4 + Mermaid              → wiki pages + Mermaid
-```
+```text
 
 WikiMap CR examples:
 
@@ -79,7 +79,7 @@ spec:
   destination:
     wikiRepo: git@github.com:me/my-wiki.git
     projectDir: raw/my-docs
-```
+```text
 
 ## File Layout
 
@@ -143,7 +143,7 @@ spec:
 ├── .pre-commit-config.yaml         # Pre-commit hooks
 ├── .remarkrc.mjs                   # remark config (module self-lint)
 └── package.json                    # npm: lint, test, check
-```
+```text
 
 ## Quick Start
 
@@ -151,7 +151,7 @@ spec:
 
 ```bash
 bash /path/to/llm-wiki/scripts/new-wiki.sh my-wiki
-```
+```text
 
 Or manually:
 
@@ -161,7 +161,7 @@ git init && git switch -c main
 git submodule add https://github.com/tibrezus/llm-wiki.git .llm-wiki
 # Edit wiki.config.yml, then:
 bash .llm-wiki/scripts/bootstrap.sh
-```
+```text
 
 ### Add a project to the GitOps pipeline
 
@@ -173,7 +173,7 @@ bash .llm-wiki/scripts/bootstrap.sh
 # Or for generic documentation:
 /path/to/llm-wiki/deploy/scripts/add-wikimap.sh my-docs \
   https://github.com/me/my-docs --workflow generic --push
-```
+```text
 
 ### Develop the module
 
@@ -181,7 +181,7 @@ bash .llm-wiki/scripts/bootstrap.sh
 npm run check    # lint + test
 npm run lint     # markdownlint only
 npm run test     # pytest only
-```
+```text
 
 ## CI Validation (Wiki Instances)
 
@@ -208,14 +208,14 @@ git -C .llm-wiki pull origin main
 bash .llm-wiki/scripts/bootstrap.sh
 git add -A && git commit -m "chore: bump submodule" && git push
 # Watch CI: gh run watch (GitHub) or fj actions tasks (Forgejo/Codeberg)
-```
+```text
 
 For the controller image: rebuild and push:
 
 ```bash
 docker build -t ghcr.io/tibrezus/llm-wiki-controller:0.1.0 .
 docker push ghcr.io/tibrezus/llm-wiki-controller:0.1.0
-```
+```text
 
 ## License
 
