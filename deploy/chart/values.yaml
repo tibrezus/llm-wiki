@@ -7,6 +7,10 @@ image:
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
+# Image pull secrets for private registries.
+imagePullSecrets:
+  - name: ghcr-pull
+
 # The namespace to watch for WikiMap CRs.
 namespace: llm-wiki
 

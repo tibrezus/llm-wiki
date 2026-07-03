@@ -18,6 +18,10 @@ spec:
         spec:
           serviceAccountName: {{ include "llm-wiki-controller.fullname" . }}
           restartPolicy: OnFailure
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: rig-controller
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
