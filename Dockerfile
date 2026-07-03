@@ -38,9 +38,10 @@ RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${Z
 # pi.dev harness + LikeC4
 RUN npm install -g @earendil-works/pi-coding-agent likec4
 
-# Emitter scripts + reconcile + agent logic
+# Emitter scripts + reconcile + agent logic + CI monitor
 COPY deploy/scripts/reconcile.sh         /usr/local/bin/reconcile.sh
 COPY deploy/scripts/agent-sync.sh        /usr/local/bin/agent-sync.sh
+COPY deploy/scripts/ci-monitor.sh        /usr/local/bin/ci-monitor.sh
 COPY .github/actions/repo-map/emit-go.sh /emitters/emit-go.sh
 COPY .github/actions/repo-map/emit-zig.sh /emitters/emit-zig.sh
 COPY schemas/repo-map.schema.yaml        /schema/repo-map.schema.yaml
@@ -49,6 +50,6 @@ COPY scripts/arch/validate-rig.py        /usr/local/bin/validate-rig.py
 # The llm-wiki skill (for the pi agent to follow)
 COPY skill/SKILL.md                      /skills/wiki/SKILL.md
 
-RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /emitters/emit-go.sh /emitters/emit-zig.sh
+RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /usr/local/bin/ci-monitor.sh /emitters/emit-go.sh /emitters/emit-zig.sh
 
 ENTRYPOINT ["/usr/local/bin/reconcile.sh"]

@@ -11,14 +11,25 @@ set -euo pipefail
 #   lc4     — reads the updated RIG, updates the LikeC4 model + Mermaid diagrams
 #   generic — reads new raw source material, creates/updates wiki pages
 #
+# After the agent pushes, a CI self-healing loop kicks in:
+#   1. ci-monitor.sh polls the CI run triggered by the push
+#   2. If CI fails, the agent is re-invoked with "run lint, fix errors, push"
+#   3. Repeat up to MAX_CI_RETRIES times
+#
 # Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]
 #
 # Environment:
 #   LLM_WIKI_ZAI_TOKEN — ZAI API key (injected from ExternalSecret)
+#   LLM_WIKI_GITHUB_TOKEN — GitHub PAT (for GitHub wiki CI monitoring)
+#   LLM_WIKI_CODEBERG_TOKEN — Codeberg token (for Codeberg CI monitoring)
 
 WIKI_DIR="${1:?Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]}"
 PROJECT="${2:?Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]}"
 WORKFLOW="${3:-lc4}"
+
+# CI self-healing configuration
+MAX_CI_RETRIES=3
+CI_POLL_WAIT=300   # max seconds to wait for CI per attempt
 
 log() { echo "[agent-sync] $(date -u +%H:%M:%S) $*"; }
 
@@ -35,9 +46,8 @@ else
 fi
 
 command -v pi >/dev/null 2>&1 || { log "ERROR: pi not found on PATH"; exit 1; }
-command -v likec4 >/dev/null 2>&1 || { log "WARN: likec4 not found"; }
 
-log "starting agent sync…"
+WIKI_REPO=$(cd "$WIKI_DIR" && git remote get-url origin 2>/dev/null || echo "")
 
 # Build the prompt based on workflow type
 if [ "$WORKFLOW" = "lc4" ]; then
@@ -101,7 +111,8 @@ fi
 
 cd "$WIKI_DIR"
 
-# Run the agent non-interactively
+# --- Phase 1: Run the agent (initial documentation update) ---
+log "starting agent sync…"
 timeout 1800 pi --print \
     --skill /skills/wiki/SKILL.md \
     --model "$MODEL" \
@@ -112,4 +123,87 @@ timeout 1800 pi --print \
     exit 1
 }
 
-log "agent sync complete for $PROJECT ($WORKFLOW) ✓"
+log "agent sync complete for $PROJECT ($WORKFLOW)"
+
+# --- Phase 2: CI self-healing loop ---
+#
+# After the agent pushes, monitor the CI run it triggered. If CI fails,
+# re-invoke the agent with instructions to run the lint pipeline locally,
+# fix the errors, and push again. Repeat up to MAX_CI_RETRIES times.
+
+if [ -z "$WIKI_REPO" ]; then
+    log "no wiki repo URL — skipping CI monitoring"
+    exit 0
+fi
+
+if [ ! -f /usr/local/bin/ci-monitor.sh ]; then
+    log "ci-monitor.sh not found — skipping CI monitoring"
+    exit 0
+fi
+
+COMMIT_SHA=$(git rev-parse HEAD)
+log "post-push CI monitoring for ${COMMIT_SHA:0:12}…"
+
+for attempt in $(seq 1 "$MAX_CI_RETRIES"); do
+    log "CI monitoring attempt $attempt/$MAX_CI_RETRIES…"
+
+    CI_STATUS=$(timeout $((CI_POLL_WAIT + 30)) \
+        bash /usr/local/bin/ci-monitor.sh "$WIKI_REPO" "$COMMIT_SHA" "$CI_POLL_WAIT" 2>/dev/null \
+        || echo "skip")
+
+    case "$CI_STATUS" in
+        success)
+            log "CI green ✓ — pipeline complete"
+            exit 0
+            ;;
+        skip)
+            log "CI monitoring not available for this platform — skipping"
+            exit 0
+            ;;
+        timeout)
+            log "CI polling timed out — assuming OK (non-blocking)"
+            exit 0
+            ;;
+        failed)
+            log "CI FAILED (attempt $attempt) — invoking agent to fix…"
+
+            FIX_PROMPT="You are working in the wiki repository at $WIKI_DIR.
+
+Your previous commit (${COMMIT_SHA:0:12}) FAILED CI. The wiki CI pipeline checks:
+  markdownlint, mdlint-obsidian, remark frontmatter schema,
+  Mermaid render check, LikeC4 format check,
+  unique filenames, raw/ immutability, and wiki health.
+
+Find and fix every error:
+1. Run the lint pipeline: bash .llm-wiki/scripts/ci-lint.sh
+2. Read the error output carefully.
+3. Fix every error in the relevant files.
+4. Re-run the lint to confirm: bash .llm-wiki/scripts/ci-lint.sh
+5. When all errors are fixed, commit and push:
+   git add -A && git commit -m 'fix: resolve CI lint failures' && git push origin main
+
+Do NOT modify files in raw/. Follow the wiki schema in AGENTS.md."
+
+            timeout 1200 pi --print \
+                --skill /skills/wiki/SKILL.md \
+                --model "$MODEL" \
+                --approve \
+                --no-skills \
+                "$FIX_PROMPT" 2>&1 || {
+                log "WARN: agent fix attempt $attempt failed"
+            }
+
+            # Check if the agent actually made changes
+            NEW_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+            if [ -z "$NEW_SHA" ] || [ "$NEW_SHA" = "$COMMIT_SHA" ]; then
+                log "agent made no changes — stopping CI healing loop"
+                exit 0
+            fi
+            COMMIT_SHA="$NEW_SHA"
+            log "agent pushed fix commit ${COMMIT_SHA:0:12}"
+            ;;
+    esac
+done
+
+log "CI healing loop exhausted ($MAX_CI_RETRIES attempts) — CI may still be red"
+exit 0
