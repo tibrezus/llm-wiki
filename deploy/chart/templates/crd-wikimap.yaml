@@ -116,3 +116,5 @@ spec:
                       lastTransitionTime:
                         type: string
                         format: date-time
+      subresources:
+        status: {}
