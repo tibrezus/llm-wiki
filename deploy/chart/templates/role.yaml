@@ -10,7 +10,7 @@ metadata:
 rules:
   # Read and patch WikiMap CRs (our own CRD).
   - apiGroups: ["llm-wiki.dev"]
-    resources: ["wikimaps"]
+    resources: ["wikimaps", "wikimaps/status"]
     verbs: ["get", "list", "watch", "patch", "update"]
   # Read Flux GitRepository CRs (to resolve source artifacts).
   - apiGroups: ["source.toolkit.fluxcd.io"]
