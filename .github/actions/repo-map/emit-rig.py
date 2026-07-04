@@ -365,10 +365,21 @@ def extract_go() -> tuple[list[dict], list[dict], list[str], list[dict]]:
     if not Path("go.mod").exists():
         return [], [], [], []
 
+    # Download dependencies first (needed for go list to resolve imports)
     try:
+        env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
+        subprocess.run(
+            ["go", "mod", "download"],
+            capture_output=True, text=True, timeout=120, env=env,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass  # continue anyway — go list -e handles missing deps
+
+    try:
+        env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
         r = subprocess.run(
             ["go", "list", "-e", "-json", "./..."],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=60, env=env,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return [], [], [], []
