@@ -168,16 +168,9 @@ for item in data['items']:
     if [ "$WORKFLOW" = "lc4" ]; then
         # --- LC4: generate RIG ---
 
-        EMITTER="$EMITTERS_DIR/emit-${SRC_LANG}.sh"
-        if [ ! -f "$EMITTER" ]; then
-            log "  ERROR: no emitter for language '$SRC_LANG'"
-            patch_status "$NAME" "lastProcessedRevision" "FAILED: no emitter"
-            continue
-        fi
-
         RIG_FILE="$WORKDIR/$NAME-rig.json"
         log "  generating RIG…"
-        (cd "$SRC_DIR" && bash "$EMITTER" "$RIG_FILE") || {
+        (cd "$SRC_DIR" && bash "$EMITTERS_DIR/emit-rig.sh" "$RIG_FILE" "$SRC_LANG") || {
             log "  ERROR: emitter failed"
             patch_status "$NAME" "lastProcessedRevision" "FAILED: emitter error"
             continue

@@ -68,10 +68,10 @@ spec:
                       default: main
                     language:
                       type: string
-                      enum: [go, zig, python, rust, typescript]
                       description: >
-                        Programming language — selects the RIG emitter.
-                        Required for workflow 'lc4'. Ignored for 'generic'.
+                        Programming language hint (auto-detected if omitted).
+                        The universal emitter scans for all build systems.
+                        Ignored for workflow 'generic'.
                 destination:
                   type: object
                   required: [wikiRepo, projectDir]
