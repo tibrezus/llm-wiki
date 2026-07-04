@@ -233,9 +233,16 @@ print(f'    {len(rig[\"components\"])} components, {len(rig.get(\"external_packa
     patch_status "$NAME" "lastProcessedRevision" "$ARTIFACT_REV"
     [ -n "$ARTIFACT_SHA" ] && patch_status "$NAME" "lastRigSha256" "$ARTIFACT_SHA"
 
-    # Run the LLM agent step if content changed
-    if $CHANGED && [ -f /usr/local/bin/agent-sync.sh ]; then
-        log "  running agent sync ($WORKFLOW)…"
+    # Run the LLM agent step if content changed OR status was reset
+    # (forced re-sync — model may be stale after emitter upgrades)
+    FORCE_SYNC=false
+    [ -z "$LAST_REV" ] && FORCE_SYNC=true
+    if { $CHANGED || $FORCE_SYNC; } && [ -f /usr/local/bin/agent-sync.sh ]; then
+        if $FORCE_SYNC && ! $CHANGED; then
+            log "  running agent sync ($WORKFLOW) [forced — status was reset]…"
+        else
+            log "  running agent sync ($WORKFLOW)…"
+        fi
         /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" || {
             log "  WARN: agent sync failed (non-fatal)"
         }
