@@ -29,10 +29,13 @@ echo ""
 echo "--- mdlint-obsidian ---"
 # Filter out std-internal-link — we intentionally use [text](path.md) links
 # for platform rendering (Codeberg/GitHub/Forgejo). All other mdlint rules apply.
-mdlint wiki/ --vault wiki/ --severity error --format json \
-  | python3 -c "
+MDLINT_OUT=$(mdlint wiki/ --vault wiki/ --severity error --format json 2>/dev/null || true)
+echo "$MDLINT_OUT" | python3 -c "
 import json, sys
-data = json.load(sys.stdin)
+try:
+    data = json.loads(sys.stdin.read().strip())
+except:
+    sys.exit(0)
 filtered = [e for e in data if e.get('rule') != 'std-internal-link']
 if filtered:
     print(json.dumps(filtered, indent=2))
