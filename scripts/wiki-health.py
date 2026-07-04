@@ -236,34 +236,32 @@ def check_sources_exist(pages: dict[str, WikiPage], wiki_root: str) -> list[str]
     return errors
 
 
+def extract_markdown_links(content: str) -> list[tuple[str, str]]:
+    """Extract [text](relative-path) links, excluding external URLs and anchors."""
+    stripped = []
+    in_fence = False
+    for line in content.splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            stripped.append(line)
+    text = "\n".join(stripped)
+    links = []
+    for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*?)\)', text):
+        links.append((m.group(1), m.group(2)))
+    return links
+
+
 def check_markdown_links(pages: dict[str, WikiPage]) -> list[str]:
-    """Check that internal references use [[wikilinks]] not markdown links."""
+    """Check that internal [text](relative-path) links resolve to existing files."""
     errors = []
     for page in pages.values():
-        lines = page.content.split("\n")
-        in_frontmatter = False
-        frontmatter_done = False
-        in_code_fence = False
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped == "---" and not frontmatter_done:
-                if not in_frontmatter:
-                    in_frontmatter = True
-                    continue
-                else:
-                    in_frontmatter = False
-                    frontmatter_done = True
-                    continue
-            if in_frontmatter:
-                continue
-            if stripped.startswith("```"):
-                in_code_fence = not in_code_fence
-                continue
-            if in_code_fence:
-                continue
-            # Match [text](path) where path is not external
-            for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*?)\)', line):
-                errors.append(f"MD-LINK: {page.path}:{i} uses markdown link [{m.group(1)}]({m.group(2)}) instead of [[wikilink]]")
+        links = extract_markdown_links(page.content)
+        for text, path in links:
+            target = (page.path.parent / path).resolve()
+            if not target.exists():
+                errors.append(f"BROKEN-MD-LINK: {page.path} links to [{text}]({path}) but file does not exist")
     return errors
 
 
@@ -293,6 +291,11 @@ def check_see_also_links_valid(pages: dict[str, WikiPage]) -> list[str]:
             continue
         see_also = page.content.split("## See Also")[1]
         links = extract_wikilinks(see_also)
+        # Also check markdown links in See Also
+        for text, path in extract_markdown_links(see_also):
+            target = (page.path.parent / path).resolve()
+            if target.exists():
+                links.append(target.stem)
         for link in links:
             if link not in all_names:
                 errors.append(f"BROKEN-SEE-ALSO: {page.path} See Also links to [[{link}]] which does not exist")
@@ -331,6 +334,13 @@ def check_index(pages: dict[str, WikiPage], wiki_root: str) -> list[str]:
         return errors
     index_content = index_path.read_text(encoding="utf-8")
     index_links = set(extract_wikilinks(index_content))
+    # Also extract markdown links from index.md and resolve them to page names
+    for text, path in extract_markdown_links(index_content):
+        target = (Path(wiki_root).parent / path).resolve()
+        if target.exists():
+            index_links.add(target.stem)
+        else:
+            errors.append(f"BROKEN-INDEX-LINK: index.md links to [{text}]({path}) but file does not exist")
     wiki_names = set(pages.keys())
     missing_from_index = wiki_names - index_links
     for name in missing_from_index:
@@ -373,7 +383,7 @@ def main():
         ("No body H1 headings", check_no_body_h1, True),
         ("Summary paragraph", check_summary_paragraph, True),
         ("Sources exist in raw/", lambda p: check_sources_exist(p, wiki_root), True),
-        ("No markdown links", check_markdown_links, True),
+        ("Markdown link validity", check_markdown_links, True),
         ("Log format", lambda p: check_log_format(wiki_root), True),
         ("Orphan pages", check_orphans, False),
         ("See Also sections", check_see_also, True),
