@@ -20,8 +20,8 @@ spec:
     - type: cron
       metadata:
         timezone: "UTC"
-        start: "{{ .Values.keda.cronStart }}"
-        end: "{{ .Values.keda.cronStart }}"
+        start: "0,30 * * * *"
+        end: "1,31 * * * *"
         desiredReplicas: "1"
   jobTargetRef:
     {{- include "llm-wiki-controller.jobTemplate" . | nindent 4 }}
