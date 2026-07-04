@@ -61,23 +61,34 @@ The RIG for '$PROJECT' at raw/arch/$PROJECT/rig.json has just been updated by th
 
 Your task: keep the architecture documentation current.
 
+CRITICAL: You MUST actually read the RIG file before making any decisions. Do NOT assume the content based on previous runs. Read it fresh every time.
+
 1. Read AGENTS.md for the wiki schema and the LC4 workflow.
 2. Read the skill at /skills/wiki/SKILL.md — specifically the 'arch-sync' command.
 3. Read the updated RIG: cat raw/arch/$PROJECT/rig.json
+   Count the components yourself. The RIG may have changed significantly.
 4. Read the current LikeC4 model (if it exists): cat raw/arch/$PROJECT/model.c4
 5. Compare the RIG with the model. Identify what components were:
    - ADDED (in RIG but not in model)
    - DEPRECATED (in model but not in RIG)
    - CHANGED (modified dependencies, renamed, type changed)
+   If the RIG component count differs from the model, the model MUST be updated.
+   Do NOT report 'no changes' unless you have verified every component by name.
 6. Update the LikeC4 model to reflect the RIG. Every element MUST correspond to a real entry in the RIG.
+   - Top-level executables and libraries → containers
+   - Individual source files → components within containers
+   - @import dependencies → relationships
+   - CUDA/C source files → components (group as a CUDA backend container if present)
 7. Run: likec4 format raw/arch/$PROJECT/
 8. Run: likec4 gen mermaid -o /tmp/mermaid raw/arch/$PROJECT/
 9. Update wiki pages that embed architecture diagrams for $PROJECT.
 10. Update index.md and append to log.md with operation 'arch-sync'.
+    Include the actual component count in the log entry.
 11. Commit: git add -A && git commit -m 'docs(arch-sync): $PROJECT'
 12. Push: git push origin main
 
-Do NOT write architecture from memory. Every component, dependency, and boundary MUST come from the RIG."
+Do NOT write architecture from memory. Every component, dependency, and boundary MUST come from the RIG.
+Do NOT skip steps. Read the RIG, compare carefully, update the model."
 
 elif [ "$WORKFLOW" = "generic" ]; then
     PROMPT="You are working in the wiki repository at $WIKI_DIR.
