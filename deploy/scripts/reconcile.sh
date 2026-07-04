@@ -187,7 +187,7 @@ for item in data['items']:
     fi
 
     # Also skip if WikiMap status matches (non-Dapr fallback)
-    if [ "$ARTIFACT_REV" = "$LAST_REV" ] && [ -z "$FORCE_SYNC" ]; then
+    if [ "$ARTIFACT_REV" = "$LAST_REV" ]; then
         log "  SKIP (already processed)"
         continue
     fi
