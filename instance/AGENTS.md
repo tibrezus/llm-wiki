@@ -316,6 +316,51 @@ like. If a component or dependency is not in the RIG, it does not go in the
 model. If the RIG shows a structure you don't expect, you model what the RIG
 shows.
 
+#### RIG → C4 mapping rules
+
+Follow these rules to produce architecturally rich, not just structurally
+accurate, C4 models:
+
+**Context view (Level 1):**
+- Create one `softwareSystem` for the project.
+- Model significant `external_packages` as `externalSystem` nodes. Group
+  related packages (e.g., all `docker/*` → "Docker Engine", all `openai/*`
+  → "OpenAI API"). Skip trivial packages (logging, testing utilities).
+- Connect the system to external systems using the `external_packages_ids`
+  from `entrypoint` components.
+- Mention `entrypoints` in the system description.
+
+**Container view (Level 2):**
+- Map each `executable` component → one `container`.
+- Group `package_library` / `static_library` / `shared_library` components
+  into functional containers based on source paths and naming conventions:
+  - Components under `api/` or `handler/` → "API Layer" container
+  - Components under `state/` or `store/` → "State Management" container
+  - Components under `tf/` or `terraform/` → "Infrastructure Adapter"
+  - CUDA/`.cu` sources → "GPU Backend" container
+  - C/`.c` sources → "C Interop" container
+- Draw build-level dependency edges (`depends_on_ids`) between containers.
+
+**Component view (Level 3, one per container):**
+- Each RIG component within the container → a `component` node.
+- Write SYNTHESIZED descriptions (not verbatim RIG quotes). Use the component
+  name, type, source file paths, and dependency pattern to describe its
+  architectural role in 1-2 sentences. Example:
+  - Instead of: `comp-6 machine — internal/api/machine/handlers.go`
+  - Write: `machine — REST API handlers for machine lifecycle CRUD; depends
+    on state store and patch resolver for declarative updates`
+- List source files compactly in the description.
+- Include the RIG component ID as a comment for traceability: `// RIG comp-N`.
+- Model `external_packages_ids` as relationships to the external systems
+  defined in the Context view.
+
+**Views to generate:**
+1. Context view (system + external systems)
+2. Container view (all containers + inter-container edges)
+3. One component view per major container
+4. If the project has multiple languages (e.g., Zig + CUDA), a per-language
+   backend view
+
 #### Architecture-Sync workflow
 
 When the RIG for a project changes (CI fetches a new version):

@@ -210,7 +210,55 @@ Run when `raw/arch/<project>/rig.json` has changed.
 4. **Update the LikeC4 model** (`raw/arch/<project>/model.c4`). Translate RIG
    components into typed C4 elements. Every element must correspond to a real
    entry in the RIG. **Do not include anything that is not in the RIG.**
+
+   ### RIG → C4 Mapping Guide
+
+   The RIG is the authoritative architectural map (arXiv:2601.10112). Your job
+   is to transform it into a human-readable C4 model that communicates
+   architecture, not just mirror the JSON. Follow these rules:
+
+   **Level 1 — System Context view:**
+   - One `softwareSystem` node for the entire project.
+   - `entrypoints` in the RIG → note them in the system description ("entrypoints:
+     X server, Y CLI").
+   - `external_packages` → model significant ones as `externalSystem` nodes
+     connected to the system with relationships. Group related packages
+     (e.g., all Docker packages → "Docker Engine", all OpenAI packages →
+     "OpenAI API"). Skip trivial packages (stdlib-adjacent, test utilities).
+   - This view answers: "What is this system, what does it talk to?"
+
+   **Level 2 — Container view:**
+   - Map RIG `executable` components → `container` nodes (e.g., API server,
+     CLI tool, worker process).
+   - Map RIG `package_library` / `static_library` / `shared_library` → group
+     them into functional containers based on their names and dependencies.
+     For example:
+     - Components with `api/` in source paths → "REST API" container
+     - Components with `state/` or `store/` → "State Management" container
+     - Components with `tf` or `terraform` → "Infrastructure Adapter" container
+     - CUDA/C files → "GPU Backend" container
+   - Draw `depends_on_ids` edges between containers.
+   - This view answers: "What are the major building blocks and how do they connect?"
+
+   **Level 3 — Component view (one per container):**
+   - Each RIG component within a container → a C4 `component` node.
+   - List ALL source files from the RIG in the description (compact format).
+   - Draw internal `depends_on_ids` edges as relationships.
+   - `external_packages_ids` → model as relationships to `externalSystem` nodes
+     defined in the Context view.
+   - This view answers: "What's inside each building block?"
+
+   **Description quality rules:**
+   - Don't just quote the RIG verbatim. SYNTHESIZE: use the component name,
+     type, source file paths, and dependency pattern to write a 1-2 sentence
+     description of the component's architectural role.
+   - Example: instead of `comp-6 machine — internal/api/machine/handlers.go`,
+     write `machine — REST API handlers for machine CRUD operations; depends
+     on state store and patch resolution for declarative updates`.
+   - Include the RIG component ID in a comment for traceability:
+     `// RIG comp-6`.
 5. **Regenerate Mermaid** — `likec4 gen mermaid -o /tmp/out raw/arch/<project>/`.
+   Each C4 view becomes one Mermaid diagram. Embed all views on the wiki page.
 6. **Update wiki pages** — replace the embedded Mermaid blocks with the
    regenerated output.
 7. **Update `sources:`** with `raw/arch/<project>/rig.json`.

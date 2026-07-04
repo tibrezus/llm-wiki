@@ -75,10 +75,18 @@ CRITICAL: You MUST actually read the RIG file before making any decisions. Do NO
    If the RIG component count differs from the model, the model MUST be updated.
    Do NOT report 'no changes' unless you have verified every component by name.
 6. Update the LikeC4 model to reflect the RIG. Every element MUST correspond to a real entry in the RIG.
-   - Top-level executables and libraries → containers
-   - Individual source files → components within containers
-   - @import dependencies → relationships
-   - CUDA/C source files → components (group as a CUDA backend container if present)
+   Follow the RIG → C4 mapping:
+   a. Context view: one softwareSystem + external_packages as externalSystem nodes.
+      Group related packages (e.g., all docker/* → 'Docker Engine').
+   b. Container view: executables → containers. Group libraries by function
+      (api/, state/, tf/ patterns). Draw depends_on_ids between containers.
+   c. Component views (one per container): each RIG component → component node.
+      Write SYNTHESIZED descriptions using the component's name, source paths,
+      and dependency pattern — NOT verbatim RIG quotes.
+      Example: 'machine — REST handlers for machine CRUD; depends on state store'
+      Include the RIG comp-N ID as a comment.
+      Model external_packages_ids as edges to external systems.
+   d. Generate views: context, containers, one component view per major container.
 7. Run: likec4 format raw/arch/$PROJECT/
 8. Run: likec4 gen mermaid -o /tmp/mermaid raw/arch/$PROJECT/
 9. Update wiki pages that embed architecture diagrams for $PROJECT.
