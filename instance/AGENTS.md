@@ -87,12 +87,12 @@ terms and synonyms. This becomes the first and most important qmd chunk.
 
 ## Section Title
 
-Body content with [[wikilinks]] to other wiki pages.
+Body content with [Markdown links](../type/page-name.md) to other wiki pages.
 
 ## See Also
 
-- [[related-page-1]] — Brief description
-- [[related-page-2]] — Brief description
+- [related-page-1](../type/related-page-1.md) — Brief description
+- [related-page-2](../type/related-page-2.md) — Brief description
 ```
 
 ### Frontmatter Rules
@@ -113,26 +113,30 @@ Body content with [[wikilinks]] to other wiki pages.
   primary keywords.
 - **Section rule**: Each `## Section` should be 200-900 tokens. `##` headings are
   qmd chunk boundaries.
-- **Cross-reference rule**: Include context with wikilinks — "See [[cilium]] for
-  Cilium CNI configuration" not just "See [[cilium]]".
+- **Cross-reference rule**: Include context with links — "See
+  [cilium](../entities/cilium.md) for Cilium CNI configuration" not just
+  "See [cilium](../entities/cilium.md)".
 - **See Also rule**: Every page ends with `## See Also` linking to at least 2
   related pages.
 - **Never use `#` headings** in body (reserved for title).
-- **Never use markdown links** for internal references — always use `[[wikilinks]]`.
+- **Use Markdown links** for internal references: `[page-name](../type/page-name.md)`.
+  These render as clickable links on Codeberg, GitHub, and Forgejo. Do NOT use
+  `[[wikilinks]]` — they only work in Obsidian, not on web platforms.
 
 ## Naming Conventions
 
 - File names: lowercase, hyphen-separated, `.md` extension.
 - **Unique filenames** — no two files in `wiki/` may share a name, regardless of
-  directory. This enables filename-only wikilinks.
+  directory.
 - Never use spaces, uppercase, or special characters.
 
 ## Cross-Referencing Rules
 
-1. **Always use `[[wikilinks]]`** — filename only, no path, no extension.
-2. **When creating a page**, scan all existing pages and add wikilinks where relevant.
+1. **Use Markdown links**: `[page-name](../type/page-name.md)` — relative path
+   from the current file. These render on Codeberg/GitHub/Forgejo.
+2. **When creating a page**, scan all existing pages and add Markdown links where relevant.
 3. **When updating a page**, check if new content mentions concepts with pages and
-   add wikilinks.
+   add Markdown links.
 4. **Every page must have `## See Also`** with at least 2 related pages.
 5. **Bidirectional linking**: if A links to B, B should link back to A.
 6. **Pipe wikilinks in tables**: avoid `[[page|display]]` inside markdown tables —
@@ -417,7 +421,7 @@ Chronological append-only log:
 - **Never delete wiki pages** without explicit instruction
 - **Never use inline HTML** in wiki pages
 - **Never use `#` headings** in body (reserved for title)
-- **Never use markdown links** for internal references — use `[[wikilinks]]`
+- **Use Markdown links** for internal references: `[name](../type/name.md)`
 - **Never leave a page without frontmatter**
 - **Never create a page without `## See Also`**
 - **Never skip updating `index.md`** after page changes

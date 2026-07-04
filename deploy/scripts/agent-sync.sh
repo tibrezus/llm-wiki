@@ -107,12 +107,14 @@ Your task: keep the documentation current by processing the new sources.
 5. Create new wiki pages for uncovered topics (correct entity-type directory).
 6. Update existing pages with new or changed information.
 7. Add Mermaid diagrams where they help (sequence, flowchart, etc.).
-8. Maintain cross-references: add [[wikilinks]] from related pages.
+8. Maintain cross-references: use [Markdown links](../type/page-name.md) from related pages.
 9. Update index.md and append to log.md with operation 'update'.
 10. Commit: git add -A && git commit -m 'docs(update): $PROJECT'
 11. Push: git push origin main
 
 Follow the wiki page format strictly (frontmatter, entity types, See Also).
+Use [Markdown links](relative/path.md) for cross-references — NOT [[wikilinks]].
+Links must be relative paths from the current file, e.g. [name](../entities/name.md).
 Never modify files in raw/."
 
 else

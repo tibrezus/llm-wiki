@@ -135,7 +135,7 @@ Ingest new information into the wiki (Generic workflow).
 1. **Understand the change.** Read relevant existing pages.
 2. **Save source** to `raw/` (e.g. `2026-06-26-topic-name.md`). **Never modify
    `raw/`** after saving.
-3. **Update existing pages**: add information, add `[[wikilinks]]`, update
+3. **Update existing pages**: add information, add Markdown cross-references, update
    `sources: []` and `updated:` in frontmatter.
 4. **Create new pages** for uncovered topics (correct entity-type directory).
 5. **Add diagrams** as ` ```mermaid ` blocks where they help. Pick the type that
@@ -172,15 +172,16 @@ Create a new wiki page.
 
    ## Section Title
 
-   Body with [[wikilinks]].
+   Body with [Markdown links](../type/page-name.md) to other pages.
 
    ## See Also
 
-   - [[related-1]] — description
-   - [[related-2]] — description
+   - [related-1](../type/related-1.md) — description
+   - [related-2](../type/related-2.md) — description
    ```
 
-4. Add `[[wikilink]]` references from existing pages to the new page.
+4. Add Markdown links from existing pages to the new page. Use relative paths:
+   from `wiki/concepts/x.md` to `wiki/entities/y.md` → `[y](../entities/y.md)`.
 5. Ensure bidirectional links.
 6. Update `index.md`, append to `log.md`, validate with `npm run check`.
 
@@ -275,8 +276,8 @@ project repo.
 Remove a page. **Never without explicit instruction.**
 
 1. Find the page: `find wiki/ -name "topic.md"`.
-2. Find all inbound links: `grep -rl "[[topic]]" wiki/`.
-3. Remove/update wikilinks from referencing pages.
+2. Find all inbound links: `grep -rl "topic" wiki/` (check both `[topic](` and `[[topic]]`).
+3. Remove/update Markdown links from referencing pages.
 4. Delete the file.
 5. Remove from `index.md`, append to `log.md`, validate.
 
@@ -385,7 +386,8 @@ Before committing any wiki change:
 - [ ] No duplicate filenames across `wiki/`
 - [ ] `index.md` updated, `log.md` appended
 - [ ] Bidirectional links maintained
-- [ ] No `#` body headings, no inline HTML, no markdown links for internal refs
+- [ ] No `#` body headings, no inline HTML
+- [ ] Cross-references use [Markdown links](relative/path.md) that render on Codeberg/GitHub
 - [ ] Generic workflow pages: Mermaid only (no LikeC4 models)
 - [ ] Architecture pages: Mermaid generated from LikeC4 model; model validates
 - [ ] **Architecture diagrams derived from `raw/arch/` RIG — NOT from memory**
