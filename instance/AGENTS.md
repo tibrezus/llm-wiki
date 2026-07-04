@@ -342,6 +342,7 @@ accurate, C4 models:
 - Draw build-level dependency edges (`depends_on_ids`) between containers.
 
 **Component view (Level 3, one per container):**
+
 - Each RIG component within the container → a `component` node.
 - Write SYNTHESIZED descriptions (not verbatim RIG quotes). Use the component
   name, type, source file paths, and dependency pattern to describe its
@@ -355,6 +356,7 @@ accurate, C4 models:
   defined in the Context view.
 
 **Views to generate:**
+
 1. Context view (system + external systems)
 2. Container view (all containers + inter-container edges)
 3. One component view per major container
