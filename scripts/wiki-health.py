@@ -251,7 +251,7 @@ def extract_markdown_links(content: str) -> list[tuple[str, str]]:
             stripped.append(line)
     text = "\n".join(stripped)
     links = []
-    for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*?)\)', text):
+    for m in re.finditer(r'\[([^\]]*?)\]\((?!https?://|mailto:|#)([^)]*\.(?:md|png|jpg|jpeg|gif|svg|json|yaml|yml|c4)(?:#[^)]*)?)\)', text):
         links.append((m.group(1), m.group(2)))
     return links
 
