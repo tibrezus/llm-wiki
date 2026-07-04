@@ -2,21 +2,20 @@
 set -euo pipefail
 
 # RIG emitter for Zig projects.
-# Parses build.zig (component declarations) and build.zig.zon (external
-# dependencies) to produce a RIG JSON conforming to schemas/repo-map.schema.yaml.
 #
-# Zig's build system is programmatic — build.zig is code that calls
-# b.addExecutable(), b.addModule(), etc. There is no `zig list -json` like
-# Go's `go list`. This emitter does static analysis of the build file
-# patterns, which captures the common case deterministically.
+# Two-layer analysis:
+#   Layer 1 — Build targets: parse build.zig for executables, modules, tests
+#   Layer 2 — Source units:  scan .zig files, parse @import() for dependency graph
+#
+# Every source file becomes a component. Every @import("foo.zig") creates a
+# dependency edge. CUDA .cu and C .c files are also captured. This gives the
+# LLM agent a complete architectural picture to derive the C4 model from.
 #
 # Usage: emit-zig.sh <output.json>
 
 OUT="${1:?Usage: emit-zig.sh <output.json>}"
 
-# Verify zig is available (needed for version reporting; parsing is static).
 command -v zig >/dev/null 2>&1 || { echo "::error::zig not found on PATH"; exit 1; }
-
 [ -f "build.zig" ] || { echo "::error::Not a Zig project (no build.zig)"; exit 1; }
 
 ZIG_VERSION=$(zig version 2>/dev/null || echo "unknown")
@@ -24,171 +23,254 @@ ZIG_VERSION=$(zig version 2>/dev/null || echo "unknown")
 python3 - "$OUT" "$ZIG_VERSION" <<'PYEOF'
 import json, os, re, subprocess, sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 out_path = sys.argv[1]
 zig_version = sys.argv[2]
 
-build_zig = open("build.zig", encoding="utf-8", errors="replace").read()
+build_zig = Path("build.zig").read_text(encoding="utf-8", errors="replace")
 build_zon_text = ""
-if os.path.isfile("build.zig.zon"):
-    build_zon_text = open("build.zig.zon", encoding="utf-8", errors="replace").read()
+if Path("build.zig.zon").exists():
+    build_zon_text = Path("build.zig.zon").read_text(encoding="utf-8", errors="replace")
 
 components = []
-comp_id_map = {}  # (name, type) -> id
-ext_pkg_map = {}  # name -> id
+comp_by_name = {}    # component name → id
+comp_by_file = {}    # source file path → id (for import resolution)
+ext_pkg_map = {}
 entrypoints = []
 next_id = 1
-next_ep_id = 1
+next_epid = 1
 
-def make_id():
+def cid():
     global next_id
-    cid = f"comp-{next_id}"
-    next_id += 1
-    return cid
+    v = f"comp-{next_id}"; next_id += 1; return v
 
-def make_epid():
-    global next_ep_id
-    eid = f"pkg-{next_ep_id}"
-    next_ep_id += 1
-    return eid
+def epid():
+    global next_epid
+    v = f"pkg-{next_epid}"; next_epid += 1; return v
 
-# --- Parse components from build.zig ---
-#
-# Patterns we look for:
-#   b.addExecutable(.{ .name = "foo", .root_source_file = b.path("src/main.zig"), ... })
-#   const exe = b.addExecutable(.{ .name = "foo", ... })
-#   b.addModule("bar", .{ .root_source_file = b.path("src/bar.zig"), ... })
-#   const mod = b.addModule("bar", .{ ... })
+def add_dep(consumer_id, provider_id):
+    """Add a dependency edge, avoiding duplicates."""
+    for c in components:
+        if c["id"] == consumer_id:
+            if provider_id not in c["depends_on_ids"]:
+                c["depends_on_ids"].append(provider_id)
+            return
+
+# ============================================================
+# Layer 1: Build targets from build.zig
+# ============================================================
 
 # Executables: addExecutable with .name = "..."
 exe_re = re.compile(
     r'addExecutable\s*\(\s*\.\{\s*(?:.*?\s)?\.name\s*=\s*"([^"]+)"',
     re.DOTALL,
 )
+exe_var_map = {}  # variable name → exe name
+
 for m in exe_re.finditer(build_zig):
     name = m.group(1)
-    cid = make_id()
-    key = (name, "executable")
-    comp_id_map[key] = cid
-
-    # Try to find root_source_file near this match (within 300 chars)
+    comp_id = cid()
+    comp_by_name[name] = comp_id
     after = build_zig[m.end():m.end() + 300]
     src_match = re.search(r'\.root_source_file\s*=\s*b\.path\("([^"]+)"\)', after)
-    src_files = [src_match.group(1)] if src_match else []
-
+    root_file = src_match.group(1) if src_match else ""
     components.append({
-        "id": cid,
+        "id": comp_id,
         "name": name,
         "type": "executable",
         "programming_language": "zig",
-        "source_files": src_files,
+        "source_files": [root_file] if root_file else [],
         "external_packages_ids": [],
         "depends_on_ids": [],
     })
-    entrypoints.append(cid)
+    entrypoints.append(comp_id)
+    if root_file:
+        comp_by_file[root_file] = comp_id
 
-# Modules: addModule("name", .{ ... })
+# Also capture variable assignments: const exe = b.addExecutable(...)
+assign_exe = re.compile(
+    r'(?:const|var)\s+(\w+)\s*=\s*\S*addExecutable\s*\(\s*\.\{\s*(?:.*?\s)?\.name\s*=\s*"([^"]+)"',
+    re.DOTALL,
+)
+for m in assign_exe.finditer(build_zig):
+    exe_var_map[m.group(1)] = m.group(2)
+
+# Modules: addModule("name", .{ ... }) or addModule(.{ .name = "..." })
 mod_re = re.compile(r'addModule\s*\(\s*"([^"]+)"')
 for m in mod_re.finditer(build_zig):
     name = m.group(1)
-    cid = make_id()
-    key = (name, "module")
-    comp_id_map[key] = cid
+    if name not in comp_by_name:
+        comp_id = cid()
+        comp_by_name[name] = comp_id
+        after = build_zig[m.end():m.end() + 300]
+        src_match = re.search(r'\.root_source_file\s*=\s*b\.path\("([^"]+)"\)', after)
+        root_file = src_match.group(1) if src_match else ""
+        components.append({
+            "id": comp_id,
+            "name": name,
+            "type": "package_library",
+            "programming_language": "zig",
+            "source_files": [root_file] if root_file else [],
+            "external_packages_ids": [],
+            "depends_on_ids": [],
+        })
+        if root_file:
+            comp_by_file[root_file] = comp_id
 
-    # Source file is harder for modules — look for root_source_file
-    after = build_zig[m.end():m.end() + 300]
-    src_match = re.search(r'\.root_source_file\s*=\s*b\.path\("([^"]+)"\)', after)
-    src_files = [src_match.group(1)] if src_match else []
-
-    components.append({
-        "id": cid,
-        "name": name,
-        "type": "package_library",
-        "programming_language": "zig",
-        "source_files": src_files,
-        "external_packages_ids": [],
-        "depends_on_ids": [],
-    })
-
-# Tests: addTest with .name = "..." or .root_source_file
-test_re = re.compile(
-    r'addTest\s*\(\s*\.\{\s*(?:.*?\s)?\.name\s*=\s*"([^"]+)"',
-    re.DOTALL,
+# Also match: .root_source_file = b.path("src/lib.zig") in addModule struct form
+mod_struct_re = re.compile(
+    r'addModule\s*\(\s*\.\{\s*(?:.*?\s)?\.name\s*=\s*\.(\w+)'
 )
-for m in test_re.finditer(build_zig):
+for m in mod_struct_re.finditer(build_zig):
     name = m.group(1)
-    cid = make_id()
-    key = (name, "test")
-    comp_id_map[key] = cid
-    components.append({
-        "id": cid,
-        "name": name,
-        "type": "package_library",  # tests are library-like in the RIG model
-        "programming_language": "zig",
-        "source_files": [],
-        "external_packages_ids": [],
-        "depends_on_ids": [],
-    })
+    if name not in comp_by_name:
+        comp_id = cid()
+        comp_by_name[name] = comp_id
+        after = build_zig[m.end():m.end() + 300]
+        src_match = re.search(r'\.root_source_file\s*=\s*b\.path\("([^"]+)"\)', after)
+        root_file = src_match.group(1) if src_match else ""
+        components.append({
+            "id": comp_id,
+            "name": name,
+            "type": "package_library",
+            "programming_language": "zig",
+            "source_files": [root_file] if root_file else [],
+            "external_packages_ids": [],
+            "depends_on_ids": [],
+        })
+        if root_file:
+            comp_by_file[root_file] = comp_id
 
-# --- Parse internal dependencies from addImport calls ---
-#
-# Pattern: <consumer>.addImport("alias", <provider>)
-# or:      <consumer>.root_module.addImport("alias", <provider>)
-#
-# The provider is usually a variable that was assigned from addModule/addExecutable.
-# We also look for: b.dependency("name", ...) which links external deps.
-import_re = re.compile(
-    r'(\w+)\.root_module\.addImport\s*\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)'
-)
-# Also match without root_module
-import_re2 = re.compile(
-    r'(\w+)\.addImport\s*\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)'
-)
-
-# Build a map of variable name -> component id by scanning assignments
-# e.g., const exe = b.addExecutable(...)
-#       const mod = b.addModule(...)
+# Variable → component mapping for addImport resolution
 var_to_comp = {}
-assign_exe = re.compile(r'(?:const|var)\s+(\w+)\s*=\s*\S*addExecutable\s*\(\s*\.\{\s*(?:.*?\s)?\.name\s*=\s*"([^"]+)"', re.DOTALL)
-for m in assign_exe.finditer(build_zig):
-    var_to_comp[m.group(1)] = comp_id_map.get((m.group(2), "executable"))
+for m in re.finditer(
+    r'(?:const|var)\s+(\w+)\s*=\s*b\.(?:addModule|createModule)\s*\(\s*(?:\.\{\s*)?(?:.*?\s)?\.name\s*=\s*"?\.?(\w+)"?',
+    build_zig, re.DOTALL
+):
+    var_name, mod_name = m.group(1), m.group(2)
+    if mod_name in comp_by_name:
+        var_to_comp[var_name] = comp_by_name[mod_name]
 
-assign_mod = re.compile(r'(?:const|var)\s+(\w+)\s*=\s*\S*addModule\s*\(\s*"([^"]+)"')
-for m in assign_mod.finditer(build_zig):
-    var_to_comp[m.group(1)] = comp_id_map.get((m.group(2), "module"))
-
-# Also map bare addExecutable/addModule (not assigned to a var) — keyed by name
-for key, cid in comp_id_map.items():
-    name, ctype = key
-    # Fallback: use the name as a pseudo-var (covers "exe", "mod" common patterns)
-    pass
-
-# Resolve import edges
-for regex in (import_re, import_re2):
+# Resolve addImport edges between build targets
+for regex in [
+    re.compile(r'(\w+)\.addImport\s*\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)'),
+    re.compile(r'(\w+)\.root_module\.addImport\s*\(\s*"([^"]+)"\s*,\s*(\w+)\s*\)'),
+]:
     for m in regex.finditer(build_zig):
         consumer_var, alias, provider_var = m.group(1), m.group(2), m.group(3)
-        consumer_cid = var_to_comp.get(consumer_var)
-        provider_cid = var_to_comp.get(provider_var)
+        consumer_cid = var_to_comp.get(consumer_var) or comp_by_name.get(exe_var_map.get(consumer_var, ""))
+        provider_cid = var_to_comp.get(provider_var) or comp_by_name.get(exe_var_map.get(provider_var, ""))
         if consumer_cid and provider_cid and consumer_cid != provider_cid:
-            for c in components:
-                if c["id"] == consumer_cid:
-                    if provider_cid not in c["depends_on_ids"]:
-                        c["depends_on_ids"].append(provider_cid)
-                    break
+            add_dep(consumer_cid, provider_cid)
 
-# --- Parse external packages from build.zig.zon ---
-#
-# .dependencies = .{
-#     .foo = .{ .url = "...", .hash = "..." },
-#     .bar = .{ .path = "vendor/bar" },
-# }
-#
-# We extract the dependency names (the keys under .dependencies).
+# ============================================================
+# Layer 2: Source file analysis (@import graph)
+# ============================================================
+
+# Find all .zig source files
+zig_files = []
+for root_dir in ["src", "tools"]:
+    if Path(root_dir).exists():
+        for p in Path(root_dir).rglob("*.zig"):
+            zig_files.append(str(p))
+
+# Create a component per source file (if not already the root of a build target)
+for fpath in sorted(zig_files):
+    if fpath in comp_by_file:
+        continue  # already a build target root file
+    # Derive component name from filename
+    name = Path(fpath).stem
+    # Avoid name collisions
+    if name in comp_by_name:
+        name = f"{Path(fpath).parent.name}_{name}"
+    if name in comp_by_name:
+        continue
+    comp_id = cid()
+    comp_by_name[name] = comp_id
+    comp_by_file[fpath] = comp_id
+    components.append({
+        "id": comp_id,
+        "name": name,
+        "type": "component",
+        "programming_language": "zig",
+        "source_files": [fpath],
+        "external_packages_ids": [],
+        "depends_on_ids": [],
+    })
+
+# Parse @import() calls to build the dependency graph
+import_re = re.compile(r'@import\s*\(\s*"([^"]+)"\s*\)')
+for fpath in zig_files:
+    consumer_id = comp_by_file.get(fpath)
+    if not consumer_id:
+        continue
+    try:
+        content = Path(fpath).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        continue
+    for m in import_re.finditer(content):
+        target = m.group(1)
+        # Resolve relative imports
+        if target.startswith("."):
+            resolved = str((Path(fpath).parent / target).resolve())
+            # Try to normalize relative to project root
+            try:
+                resolved = str(Path(resolved).relative_to(Path.cwd()))
+            except ValueError:
+                pass
+        else:
+            resolved = target
+        # Skip std library imports
+        if resolved in ("std", "config", "builtin"):
+            continue
+        # Find the target component
+        provider_id = comp_by_file.get(resolved)
+        if not provider_id:
+            # Try with src/ prefix
+            for prefix in ["", "src/", "tools/"]:
+                if prefix + resolved in comp_by_file:
+                    provider_id = comp_by_file[prefix + resolved]
+                    break
+        if provider_id and provider_id != consumer_id:
+            add_dep(consumer_id, provider_id)
+
+# ============================================================
+# Layer 2b: CUDA and C source files
+# ============================================================
+
+for pattern, lang in [("cuda/**/*.cu", "cuda"), ("c/**/*.c", "c"), ("*.cu", "cuda"), ("*.c", "c")]:
+    for p in Path(".").glob(pattern):
+        if "zig-cache" in str(p) or "zig-out" in str(p):
+            continue
+        fpath = str(p)
+        if fpath in comp_by_file:
+            continue
+        name = p.stem
+        if name in comp_by_name:
+            name = f"{lang}_{name}"
+        if name in comp_by_name:
+            continue
+        comp_id = cid()
+        comp_by_name[name] = comp_id
+        comp_by_file[fpath] = comp_id
+        components.append({
+            "id": comp_id,
+            "name": name,
+            "type": "component",
+            "programming_language": lang,
+            "source_files": [fpath],
+            "external_packages_ids": [],
+            "depends_on_ids": [],
+        })
+
+# ============================================================
+# External packages from build.zig.zon
+# ============================================================
+
 if build_zon_text:
-    # Find the .dependencies block
     deps_match = re.search(r'\.dependencies\s*=\s*\.\{', build_zon_text)
     if deps_match:
-        # Find matching closing brace (naive — ZON doesn't nest deeply in deps)
         start = deps_match.end()
         depth = 1
         pos = start
@@ -199,50 +281,23 @@ if build_zon_text:
                 depth -= 1
             pos += 1
         deps_block = build_zon_text[start:pos - 1]
-
-        # Extract dependency names: .name = .{
         for dm in re.finditer(r'\.(\w+)\s*=\s*\.\{', deps_block):
             dep_name = dm.group(1)
-            eid = make_epid()
+            eid = epid()
             ext_pkg_map[dep_name] = eid
 
-            # Try to extract URL for package_manager info
-            after_text = deps_block[dm.end():dm.end() + 500]
-            url_match = re.search(r'\.url\s*=\s*"([^"]+)"', after_text)
-            pkg_url = url_match.group(1) if url_match else ""
-
-# Build external_packages list
 external_packages = []
 for name, eid in sorted(ext_pkg_map.items()):
     external_packages.append({
         "id": eid,
         "name": name,
-        "package_manager": {
-            "name": "zig-modules",
-            "package_name": name,
-        }
+        "package_manager": {"name": "zig-modules", "package_name": name},
     })
 
-# Link external deps to components that reference them via b.dependency("name", ...)
-# or addImport with a known external name
-dep_re = re.compile(r'b\.dependency\s*\(\s*"([^"]+)"')
-for m in dep_re.finditer(build_zig):
-    dep_name = m.group(1)
-    eid = ext_pkg_map.get(dep_name)
-    if eid:
-        # Try to find which component uses this — look for addImport nearby
-        after = build_zig[m.end():m.end() + 200]
-        import_after = re.search(r'(\w+)\.root_module\.addImport\s*\(\s*"', after)
-        if import_after:
-            consumer_var = import_after.group(1)
-            consumer_cid = var_to_comp.get(consumer_var)
-            if consumer_cid:
-                for c in components:
-                    if c["id"] == consumer_cid and eid not in c["external_packages_ids"]:
-                        c["external_packages_ids"].append(eid)
-                        break
+# ============================================================
+# Repository metadata
+# ============================================================
 
-# Determine project name from build.zig.zon
 project_name = "zig-project"
 if build_zon_text:
     name_match = re.search(r'\.name\s*=\s*\.(\w+)', build_zon_text)
@@ -250,10 +305,10 @@ if build_zon_text:
         project_name = name_match.group(1)
 
 git_ref = ""
-if os.path.exists(".git"):
+if Path(".git").exists():
     try:
         r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, timeout=5)
         git_ref = r.stdout.strip()
     except Exception:
         pass
@@ -265,7 +320,6 @@ rig = {
         "ref": git_ref,
         "language": "zig",
         "build_system": "zig-build",
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "generator": "tibrezus/llm-wiki/.github/actions/repo-map@v1",
     },
     "components": components,
@@ -279,5 +333,14 @@ rig = {
 with open(out_path, "w") as f:
     json.dump(rig, f, indent=2)
 
-print(f"RIG: {len(components)} components, {len(external_packages)} external packages, {len(entrypoints)} entrypoints", file=sys.stderr)
+print(
+    f"RIG: {len(components)} components "
+    f"({sum(1 for c in components if c['type'] == 'executable')} executables, "
+    f"{sum(1 for c in components if c['type'] == 'package_library')} libraries, "
+    f"{sum(1 for c in components if c['type'] == 'component')} source units), "
+    f"{sum(len(c.get('depends_on_ids', [])) for c in components)} dependency edges, "
+    f"{len(external_packages)} external packages, "
+    f"{len(entrypoints)} entrypoints",
+    file=sys.stderr,
+)
 PYEOF
