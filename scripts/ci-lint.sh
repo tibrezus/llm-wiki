@@ -27,7 +27,17 @@ markdownlint-cli2 "wiki/**/*.md" "index.md" "log.md"
 
 echo ""
 echo "--- mdlint-obsidian ---"
-mdlint wiki/ --vault wiki/ --severity error --format json
+# Filter out std-internal-link — we intentionally use [text](path.md) links
+# for platform rendering (Codeberg/GitHub/Forgejo). All other mdlint rules apply.
+mdlint wiki/ --vault wiki/ --severity error --format json \
+  | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+filtered = [e for e in data if e.get('rule') != 'std-internal-link']
+if filtered:
+    print(json.dumps(filtered, indent=2))
+    sys.exit(1)
+"
 
 echo ""
 echo "--- remark frontmatter schema ---"
