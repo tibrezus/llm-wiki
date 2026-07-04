@@ -132,8 +132,11 @@ def check_see_also(pages: dict[str, WikiPage]) -> list[str]:
             continue
         see_also = page.content.split("## See Also")[1]
         links = extract_wikilinks(see_also)
-        if len(links) < 2:
-            errors.append(f"INSUFFICIENT-SEE-ALSO: {page.path} has {len(links)} link(s) in See Also (minimum 2)")
+        # Also count markdown links in See Also
+        md_links = extract_markdown_links(see_also)
+        total_links = len(links) + len(md_links)
+        if total_links < 2:
+            errors.append(f"INSUFFICIENT-SEE-ALSO: {page.path} has {total_links} link(s) in See Also (minimum 2)")
     return errors
 
 
