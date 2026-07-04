@@ -20,9 +20,9 @@ spec:
     - type: cron
       metadata:
         timezone: "UTC"
-        start: "{{ .Values.cronStart }}"
-        {{- if .Values.cronEnd }}
-        end: "{{ .Values.cronEnd }}"
+        start: "{{ .Values.keda.cronStart }}"
+        {{- if .Values.keda.cronEnd }}
+        end: "{{ .Values.keda.cronEnd }}"
         {{- end }}
   jobTargetRef:
     {{- include "llm-wiki-controller.jobTemplate" . | nindent 4 }}
