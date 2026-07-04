@@ -27,7 +27,7 @@ jobTimeout: 30m
 rbac:
   create: true
 
-# Resource limits for the CronJob pods.
+# Resource limits for the agent pods.
 resources:
   requests:
     cpu: 200m
@@ -37,14 +37,39 @@ resources:
     memory: 2Gi
 
 # SSH key for pushing to non-GitHub wikis (Codeberg, Forgejo, etc.).
-# Mounts a k8s secret containing an SSH private key at ~/.ssh/id_ed25519.
 sshKey:
   enabled: false
   secretName: ""
 
-# Known hosts entries for SSH git push (codeberg.org, etc.).
-# When sshKey.enabled is true, these are written to ~/.ssh/known_hosts.
+# Known hosts entries for SSH git push.
 knownHosts: []
 
-# Extra environment variables injected into the CronJob.
+# KEDA ScaledJob (event-driven, scale-to-zero).
+# When enabled, replaces CronJob with a KEDA ScaledJob.
+# Requires KEDA to be installed in the cluster (infrastructure/keda).
+keda:
+  enabled: false
+  cronStart: "0 */30 * * * *"
+  cronEnd: ""
+
+# Dapr sidecar injection (state store + pub/sub abstraction).
+# When enabled, injects a Dapr sidecar into each agent pod.
+# The agent uses Dapr HTTP API (localhost:3500) for state and events.
+dapr:
+  enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+# Persistent cache (JuiceFS PVC) for git repos, language caches, sessions.
+# When enabled, mounts a ReadWriteMany PVC at /cache.
+cache:
+  enabled: false
+  pvcName: "llm-wiki-cache"
+
+# Extra environment variables injected into the agent pods.
 extraEnv: []

@@ -1,3 +1,33 @@
+{{- if .Values.keda.enabled }}
+# KEDA ScaledJob — event-driven, scale-to-zero agent runtime.
+# Replaces the CronJob when KEDA is installed. Triggers:
+#   1. cron fallback (every 30m)
+#   2. (future) Dapr pub/sub trigger via cloudevents
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: {{ include "llm-wiki-controller.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: llm-wiki-controller
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  maxReplicaCount: 1
+  pollingInterval: 30
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  triggers:
+    - type: cron
+      metadata:
+        timezone: "UTC"
+        start: "{{ .Values.cronStart }}"
+        {{- if .Values.cronEnd }}
+        end: "{{ .Values.cronEnd }}"
+        {{- end }}
+  jobTargetRef:
+    {{- include "llm-wiki-controller.jobTemplate" . | nindent 4 }}
+{{- else }}
+# CronJob fallback (when KEDA is not installed)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -13,44 +43,5 @@ spec:
   successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
-      timeout: {{ .Values.jobTimeout }}
-      template:
-        spec:
-          serviceAccountName: {{ include "llm-wiki-controller.fullname" . }}
-          restartPolicy: OnFailure
-          {{- with .Values.imagePullSecrets }}
-          imagePullSecrets:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          containers:
-            - name: rig-controller
-              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-              imagePullPolicy: {{ .Values.image.pullPolicy }}
-              env:
-                - name: NAMESPACE
-                  value: {{ .Values.namespace | quote }}
-                {{- with .Values.extraEnv }}
-                {{- toYaml . | nindent 16 }}
-                {{- end }}
-              resources:
-                {{- toYaml .Values.resources | nindent 16 }}
-              {{- if .Values.sshKey.enabled }}
-              volumeMounts:
-                - name: ssh-key
-                  mountPath: /root/.ssh
-                  readOnly: true
-              {{- end }}
-          {{- if .Values.sshKey.enabled }}
-          volumes:
-            - name: ssh-key
-              projected:
-                sources:
-                  - secret:
-                      name: {{ .Values.sshKey.secretName }}
-                      items:
-                        - key: id_ed25519
-                          path: id_ed25519
-                          mode: 0600
-                  - configMap:
-                      name: {{ include "llm-wiki-controller.fullname" . }}-known-hosts
-          {{- end }}
+      {{- include "llm-wiki-controller.jobTemplate" . | nindent 6 }}
+{{- end }}
