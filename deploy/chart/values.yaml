@@ -49,7 +49,7 @@ knownHosts: []
 # Requires KEDA to be installed in the cluster (infrastructure/keda).
 keda:
   enabled: false
-  cronStart: "0 */30 * * * *"
+  cronStart: "*/30 * * * *"
   cronEnd: ""
 
 # Dapr sidecar injection (state store + pub/sub abstraction).

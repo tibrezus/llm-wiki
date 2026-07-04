@@ -21,9 +21,8 @@ spec:
       metadata:
         timezone: "UTC"
         start: "{{ .Values.keda.cronStart }}"
-        {{- if .Values.keda.cronEnd }}
-        end: "{{ .Values.keda.cronEnd }}"
-        {{- end }}
+        end: "{{ .Values.keda.cronStart }}"
+        desiredReplicas: "1"
   jobTargetRef:
     {{- include "llm-wiki-controller.jobTemplate" . | nindent 4 }}
 {{- else }}
