@@ -146,6 +146,16 @@ timeout 1800 pi --print \
 
 log "agent sync complete for $PROJECT ($WORKFLOW)"
 
+# Save agent run result to Dapr state
+if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
+    COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+    curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
+        -H "Content-Type: application/json" \
+        -d "[{\"key\": \"$PROJECT:agent_commit\", \"value\": \"$COMMIT_SHA\"}, {\"key\": \"$PROJECT:agent_status\", \"value\": \"synced\"}]" \
+        >/dev/null 2>&1 || true
+    log "state saved to Dapr (commit=$COMMIT_SHA)"
+fi
+
 # --- Phase 2: CI self-healing loop ---
 #
 # After the agent pushes, monitor the CI run it triggered. If CI fails,
@@ -175,6 +185,11 @@ for attempt in $(seq 1 "$MAX_CI_RETRIES"); do
     case "$CI_STATUS" in
         success)
             log "CI green ✓ — pipeline complete"
+            # Save CI status to Dapr
+            curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
+                -H "Content-Type: application/json" \
+                -d "[{\"key\": \"$PROJECT:ci_status\", \"value\": \"green\"}]" \
+                >/dev/null 2>&1 || true
             exit 0
             ;;
         skip)
@@ -187,6 +202,12 @@ for attempt in $(seq 1 "$MAX_CI_RETRIES"); do
             ;;
         failed)
             log "CI FAILED (attempt $attempt) — invoking agent to fix…"
+
+            # Record failure in Dapr
+            curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
+                -H "Content-Type: application/json" \
+                -d "[{\"key\": \"$PROJECT:ci_status\", \"value\": \"failed\"}, {\"key\": \"$PROJECT:ci_attempt\", \"value\": \"$attempt\"}]" \
+                >/dev/null 2>&1 || true
 
             FIX_PROMPT="You are working in the wiki repository at $WIKI_DIR.
 
