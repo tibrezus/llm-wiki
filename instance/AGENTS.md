@@ -100,6 +100,7 @@ Body content with [Markdown links](../type/page-name.md) to other wiki pages.
 - `title` — Specific and descriptive. Embedded with every qmd chunk. Required.
 - `type` — One of `entity`, `concept`, `guide`, `reference`. Must match the
   directory. Required.
+
 - `created` — Date first created (YYYY-MM-DD). Never change after creation. Required.
 - `updated` — Date of last meaningful content update. Update on every modification. Required.
 - `sources` — Array of filenames from `raw/` that contributed. Empty array if none. Required.
@@ -109,15 +110,20 @@ Body content with [Markdown links](../type/page-name.md) to other wiki pages.
 
 - **Title rule**: `# Title` must be specific and descriptive — it becomes the
   embedding prefix for every qmd chunk.
+
 - **Summary rule**: First paragraph must be a dense 2-3 sentence summary with
   primary keywords.
+
 - **Section rule**: Each `## Section` should be 200-900 tokens. `##` headings are
   qmd chunk boundaries.
+
 - **Cross-reference rule**: Include context with links — "See
   [cilium](../entities/cilium.md) for Cilium CNI configuration" not just
   "See [cilium](../entities/cilium.md)".
+
 - **See Also rule**: Every page ends with `## See Also` linking to at least 2
   related pages.
+
 - **Never use `#` headings** in body (reserved for title).
 - **Use Markdown links** for internal references: `[page-name](../type/page-name.md)`.
   These render as clickable links on Codeberg, GitHub, and Forgejo. Do NOT use
@@ -128,6 +134,7 @@ Body content with [Markdown links](../type/page-name.md) to other wiki pages.
 - File names: lowercase, hyphen-separated, `.md` extension.
 - **Unique filenames** — no two files in `wiki/` may share a name, regardless of
   directory.
+
 - Never use spaces, uppercase, or special characters.
 
 ## Cross-Referencing Rules
@@ -195,9 +202,11 @@ design docs, and observations.
 
 - **Inputs**: raw sources in `raw/` (markdown articles, text files, images,
   design docs, etc.). Generic — anything the human curates.
+
 - **Diagram tool**: **Mermaid only**. Mermaid renders natively on GitHub and in
   Obsidian (the primary surfaces for these wikis) and offers purpose-built
   diagram types. No LikeC4 models in this workflow.
+
 - **CI validation**: the wiki CI validates that every page's markdown is
   well-formed and every Mermaid block is syntactically valid. This is the
   source of determinism for this workflow — the LLM writes freely, CI catches
@@ -269,15 +278,18 @@ Before writing or updating any architecture diagram:
   produced deterministically by the project's CI and published as an artifact.
   It is small enough to read whole (typically 1–15K tokens). No rollup, no
   budgeting, no intermediate processing — you read it directly.
+
 - **Model tool**: **LikeC4 DSL** exclusively. You write a `.c4` model file
   (`raw/arch/<project>/model.c4`) derived from the RIG. LikeC4 enforces C4 structure
   by construction — `softwareSystem`, `container`, `component` are typed
   elements with strict nesting rules. The model is the single source of truth
   for all architecture diagrams.
+
 - **Diagram output**: **Mermaid** (generated from the LikeC4 model via
   `likec4 gen mermaid`). Mermaid renders natively on GitHub, Forgejo, and
   Obsidian. Each LikeC4 view becomes one Mermaid diagram embedded in a wiki
   page.
+
 - **CI validation**: `likec4 format --check` validates the C4 model
   (structure, types, references). This is deterministic — the DSL parser
   enforces C4 rules that free-text diagrams cannot guarantee.
@@ -322,15 +334,19 @@ Follow these rules to produce architecturally rich, not just structurally
 accurate, C4 models:
 
 **Context view (Level 1):**
+
 - Create one `softwareSystem` for the project.
 - Model significant `external_packages` as `externalSystem` nodes. Group
   related packages (e.g., all `docker/*` → "Docker Engine", all `openai/*`
   → "OpenAI API"). Skip trivial packages (logging, testing utilities).
+
 - Connect the system to external systems using the `external_packages_ids`
   from `entrypoint` components.
+
 - Mention `entrypoints` in the system description.
 
 **Container view (Level 2):**
+
 - Map each `executable` component → one `container`.
 - Group `package_library` / `static_library` / `shared_library` components
   into functional containers based on source paths and naming conventions:
@@ -350,6 +366,7 @@ accurate, C4 models:
   - Instead of: `comp-6 machine — internal/api/machine/handlers.go`
   - Write: `machine — REST API handlers for machine lifecycle CRUD; depends
     on state store and patch resolver for declarative updates`
+
 - List source files compactly in the description.
 - Include the RIG component ID as a comment for traceability: `// RIG comp-N`.
 - Model `external_packages_ids` as relationships to the external systems
@@ -386,12 +403,15 @@ A project enters this workflow by producing and publishing a **RIG JSON**:
 - **Format** — a [RIG](https://arxiv.org/abs/2601.10112) JSON conforming to
   `schemas/repo-map.schema.yaml`. Produced deterministically by the project's
   CI (the project is the source of truth — the wiki never clones or indexes).
+
 - **Producer** — the reusable GitHub Action
   `tibrezus/llm-wiki/.github/actions/repo-map@vN` dispatches by language:
   `go` (via `go list`), with other languages added per demand. The project
   adds only a one-job workflow that calls the Action — no scripts, no config.
+
 - **Name** — `<project>.rig.json`, matching the `name` in the wiki's `arch:`
   config.
+
 - **Exposure** — published as a GitHub Release asset (stable URL). Declared in
   the wiki as `rig_url: <url>` in `arch:`. For **private project repos**, add
   `rig_token_env: <SECRET_NAME>` — the name of a CI secret (read-scoped token
@@ -476,8 +496,11 @@ Chronological append-only log:
 - **Never use LikeC4 models in the Generic workflow** — Mermaid only
 - **Never hand-write Mermaid for C4 architecture diagrams** — generate from
   the LikeC4 model via `likec4 gen mermaid`
+
 - **Never write architecture diagrams from memory or training data** — every
   component, dependency, and boundary MUST come from the RIG in `raw/arch/`
+
 - **Never use the Architecture workflow if no RIG exists** — if
   `raw/arch/<project>/rig.json` is missing, use Generic Documentation instead
+
 - **Never place a page in the wrong entity type directory**
