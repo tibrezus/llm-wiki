@@ -243,38 +243,71 @@ def check_evidence_coverage(rig: dict) -> CheckResult:
 def check_test_coverage(rig: dict) -> CheckResult:
     """Paper: test_definitions link test executables to components being tested.
 
-    The Go ground truth has 34 tests for 8 components. Our RIGs should
-    populate test_definitions (even partially) for the graph to capture
-    the test surface.
+    Measures both DIRECT coverage (component has a test_definition) and
+    TRANSITIVE coverage (component depends on a tested component).
+    Transitive coverage is meaningful because testing a library exercises
+    all code reachable through its dependency chain.
     """
     tests = rig.get("test_definitions", [])
     components = rig.get("components", [])
+    comp_ids = {c.get("id") for c in components}
 
-    # Tests with at least one component being tested
+    # Directly tested components
+    directly_tested: set[str] = set()
+    for t in tests:
+        for ref_key in ("covers_ids", "components_being_tested_ids"):
+            directly_tested.update(t.get(ref_key, []))
+
+    # Build dependency graph for transitive coverage
+    deps: dict[str, list[str]] = {}
+    for c in components:
+        deps[c.get("id", "")] = c.get("depends_on_ids", [])
+
+    def has_tested_dep(cid: str, visited: set[str] | None = None) -> bool:
+        """True if cid or any transitive dependency is directly tested.
+
+        Checks BOTH directions:
+        - Forward: component depends on a tested component (thin wrappers)
+        - Reverse: a tested component depends on this component (native deps
+          exercised through integration)
+        """
+        if visited is None:
+            visited = set()
+        if cid in visited:
+            return False
+        visited.add(cid)
+        if cid in directly_tested:
+            return True
+        # Forward: my dependencies are tested
+        if any(has_tested_dep(d, visited) for d in deps.get(cid, [])):
+            return True
+        # Reverse: something that depends on me is tested
+        for other_cid, other_deps in deps.items():
+            if cid in other_deps and has_tested_dep(other_cid, visited):
+                return True
+        return False
+
+    # Count transitive coverage
+    transitively_covered = {cid for cid in comp_ids if has_tested_dep(cid)}
+    score = len(transitively_covered) / len(comp_ids) if comp_ids else 0.0
+
     meaningful_tests = sum(
         1 for t in tests
         if t.get("covers_ids") or t.get("components_being_tested_ids")
     )
 
-    # What % of components are covered by at least one test?
-    covered_comps: set[str] = set()
-    for t in tests:
-        for ref_key in ("covers_ids", "components_being_tested_ids"):
-            covered_comps.update(t.get(ref_key, []))
-
-    comp_ids = {c.get("id") for c in components}
-    covered = len(covered_comps & comp_ids)
-    score = covered / len(comp_ids) if comp_ids else 0.0
-
+    direct_count = len(directly_tested & comp_ids)
     return CheckResult(
-        name="Test definitions (test → component coverage)",
+        name="Test definitions (direct + transitive coverage)",
         category="tests",
         severity="warn" if len(tests) == 0 else ("pass" if score > 0 else "warn"),
         score=score,
-        measured=covered,
+        measured=len(transitively_covered),
         total=len(comp_ids),
-        detail=f"{len(tests)} test definition(s), {meaningful_tests} with coverage links"
-               if tests else "No test_definitions emitted",
+        detail=(f"{len(tests)} test(s), {direct_count} direct + "
+                f"{len(transitively_covered) - direct_count} transitive = "
+                f"{len(transitively_covered)}/{len(comp_ids)} covered")
+                if tests else "No test_definitions emitted",
     )
 
 

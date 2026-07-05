@@ -309,6 +309,23 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
         # Try module first, then executable
         return name_to_id.get(f"__module__{name}") or name_to_id.get(name)
 
+    # Map createModule/root_module variables to component IDs so that
+    # addImport calls on intermediate module vars resolve correctly.
+    # Pattern: const exe = b.addExecutable(.{ .root_module = exe_mod })
+    # → exe_mod should resolve to the executable's component ID.
+    mod_var_to_comp_id: dict[str, str] = {}
+    for m in re.finditer(
+        r'(?:const|var)\s+(\w+)\s*=\s*b\.addExecutable\s*\(\s*\.\{[^}]*\.root_module\s*=\s*(\w+)',
+        build_zig, re.DOTALL,
+    ):
+        exe_var = m.group(1)
+        mod_var = m.group(2)
+        exe_name = var_to_name.get(exe_var)
+        if exe_name:
+            cid = resolve_id(exe_name)
+            if cid:
+                mod_var_to_comp_id[mod_var] = cid
+
     for regex in [
         re.compile(r'(\w+)\.addImport\s*\(\s*"[^"]+"\s*,\s*(\w+)\s*\)'),
         re.compile(r'(\w+)\.root_module\.addImport\s*\(\s*"[^"]+"\s*,\s*(\w+)\s*\)'),
@@ -316,16 +333,22 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
         for m in regex.finditer(build_zig):
             consumer_var = m.group(1)
             provider_var = m.group(2)
+            # Resolve consumer: try mod_var_to_comp_id, then var_to_name
             consumer_name = var_to_name.get(consumer_var)
             provider_name = var_to_name.get(provider_var)
-            if consumer_name and provider_name:
+            # If consumer_var is a createModule var, resolve via mod_var_to_comp_id
+            cid = mod_var_to_comp_id.get(consumer_var)
+            if not cid and consumer_name:
                 cid = resolve_id(consumer_name)
+            if provider_name:
                 pid = resolve_id(provider_name)
-                if cid and pid and cid != pid:
-                    for c in components:
-                        if c["id"] == cid and pid not in c["depends_on_ids"]:
-                            c["depends_on_ids"].append(pid)
-                            break
+            else:
+                pid = mod_var_to_comp_id.get(provider_var)
+            if cid and pid and cid != pid:
+                for c in components:
+                    if c["id"] == cid and pid not in c["depends_on_ids"]:
+                        c["depends_on_ids"].append(pid)
+                        break
 
     # ── Phase 5: External packages from build.zig.zon ──
     external_packages = []
