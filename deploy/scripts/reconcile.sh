@@ -73,15 +73,15 @@ clone_or_fetch_wiki() {
     if [ -d "$cache" ]; then
         # Cached — fetch delta and create worktree
         log "  fetching wiki (cached)…"
-        git -C "$cache" fetch origin "$branch" 2>/dev/null || true
+        git -C "$cache" fetch origin "$branch" 2>&1 | tail -1 || true
         git -C "$cache" worktree remove -f "$dest" 2>/dev/null || true
-        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>/dev/null
+        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>&1 | tail -1
     else
         # First run — clone to cache, then worktree
         log "  cloning wiki (first run, caching)…"
         mkdir -p "$CACHE_DIR/repos"
-        git clone --bare "$url" "$cache" 2>/dev/null || return 1
-        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>/dev/null
+        git clone --bare "$url" "$cache" 2>&1 | tail -1 || return 1
+        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>&1 | tail -1
     fi
 }
 
@@ -215,7 +215,7 @@ for item in data['items']:
         WIKI_URL_AUTH=$(echo "$DST_WIKI" | sed "s|https://github.com|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com|; s|git@github.com:|https://x-access-token:${LLM_WIKI_GITHUB_TOKEN}@github.com/|")
     fi
     if echo "$DST_WIKI" | grep -q '^ssh://'; then
-        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes"
+        export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i /root/.ssh/id_ed25519"
     fi
 
     clone_or_fetch_wiki "$WIKI_URL_AUTH" "$DST_BRANCH" "$NAME" "$WIKI_DIR" || {
@@ -320,3 +320,12 @@ print(sum(len(c.get('depends_on_ids',[])) for c in rig['components']))
 done
 
 log "Reconciliation complete."
+
+# ── Gracefully shut down the Dapr sidecar ──
+# Without this, the daprd container keeps running indefinitely after the main
+# container exits, preventing the Job/Pod from reaching Completed state.
+if $DAPR_ENABLED; then
+    log "Shutting down Dapr sidecar…"
+    curl -sf -X POST http://localhost:3500/v1.0/shutdown >/dev/null 2>&1 || true
+    sleep 3
+fi
