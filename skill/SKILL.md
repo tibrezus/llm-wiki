@@ -103,6 +103,9 @@ unexpected, model what the RIG shows.
 - `components` of type `executable`/`shared_library` → **Container** level
 - `components` of type `package_library` + `depends_on_ids` → **Component** level
 - `source_files` within a component → **Code** level
+- `evidence` (file:line refs) → **traceability** annotations in descriptions
+- `test_definitions` (covers_ids) → **test coverage** annotations
+- `aggregators` (meta-targets) → system description context
 
 ---
 
@@ -206,7 +209,9 @@ Run when `raw/arch/<project>/rig.json` has changed.
 2. **Detect change**: `git log -p -- raw/arch/<project>/rig.json`.
 3. **Read the RIG**: `cat raw/arch/<project>/rig.json`. This is a deterministic
    JSON — read it whole. Identify components, their types, dependencies
-   (`depends_on_ids`), external packages, and entrypoints.
+   (`depends_on_ids`), external packages, entrypoints, **evidence** (file:line
+   refs proving each node is build-defined), **test_definitions** (which
+   components have tests), and **aggregators** (meta-targets like `go-build-all`).
 4. **Update the LikeC4 model** (`raw/arch/<project>/model.c4`). Translate RIG
    components into typed C4 elements. Every element must correspond to a real
    entry in the RIG. **Do not include anything that is not in the RIG.**
@@ -247,6 +252,16 @@ Run when `raw/arch/<project>/rig.json` has changed.
    - `external_packages_ids` → model as relationships to `externalSystem` nodes
      defined in the Context view.
    - This view answers: "What's inside each building block?"
+
+   **Using evidence and test_definitions (paper compliance):**
+   - `evidence` entries provide `file:line` refs proving each component is
+     build-defined. Reference the evidence in component descriptions for
+     traceability (e.g., "defined at `go.mod:1`, root source `main.go`").
+   - `test_definitions` link tests to tested components via `covers_ids`.
+     Use this to annotate which components have test coverage in the model.
+     Components without tests should be noted as "no test coverage".
+   - `aggregators` (e.g., `go-build-all`, `go-test-all`) show the build
+     target graph. Mention them in the system description.
 
    **Description quality rules:**
    - Don't just quote the RIG verbatim. SYNTHESIZE: use the component name,

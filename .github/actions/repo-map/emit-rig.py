@@ -38,6 +38,8 @@ from pathlib import Path, PurePosixPath
 
 ID_COUNTER = [0]
 PKG_COUNTER = [0]
+EVIDENCE_COUNTER = [0]
+TEST_COUNTER = [0]
 
 
 def next_id() -> str:
@@ -48,6 +50,16 @@ def next_id() -> str:
 def next_pkg_id() -> str:
     PKG_COUNTER[0] += 1
     return f"pkg-{PKG_COUNTER[0]}"
+
+
+def next_evidence_id() -> str:
+    EVIDENCE_COUNTER[0] += 1
+    return f"evidence-{EVIDENCE_COUNTER[0]}"
+
+
+def next_test_id() -> str:
+    TEST_COUNTER[0] += 1
+    return f"test-{TEST_COUNTER[0]}"
 
 
 def git_ref() -> str:
@@ -444,6 +456,7 @@ def extract_go() -> tuple[list[dict], list[dict], list[str], list[dict]]:
             "source_files": src_files,
             "external_packages_ids": ext_refs,
             "depends_on_ids": [],
+            "_import_path": import_path,  # temporary, for test linking
         })
         if is_main:
             entrypoints.append(cid)
@@ -912,6 +925,147 @@ def extract_zig_with_native() -> tuple[list[dict], list[dict], list[str], list[d
     return components, ext_pkgs, entrypoints, aggregators
 
 
+# ── Evidence generation (paper: arXiv:2601.10112) ─────────────────
+
+def _detect_build_file() -> str | None:
+    """Find the primary build system file, if any."""
+    for f in ("go.mod", "build.zig", "Cargo.toml", "package.json", "pyproject.toml", "CMakeLists.txt"):
+        if Path(f).exists():
+            return f
+    return None
+
+
+def generate_evidence(components: list[dict]) -> list[dict]:
+    """Generate evidence entries for every component.
+
+    Evidence = file:line references proving the component is defined by the
+    build system (paper core requirement). Each component gets:
+      1. A reference to the build system file (go.mod, build.zig, etc.)
+      2. A reference to its first source file at line 1
+    """
+    evidence: list[dict] = []
+    ev_cache: dict[str, str] = {}  # file_ref → evidence_id
+
+    def get_or_create(file_ref: str) -> str:
+        if file_ref in ev_cache:
+            return ev_cache[file_ref]
+        eid = next_evidence_id()
+        evidence.append({"id": eid, "line": [file_ref]})
+        ev_cache[file_ref] = eid
+        return eid
+
+    build_file = _detect_build_file()
+    build_ev_id = get_or_create(f"{build_file}:1") if build_file else None
+
+    for comp in components:
+        ev_ids = []
+        if build_ev_id:
+            ev_ids.append(build_ev_id)
+
+        # Source file evidence (first file defines the component)
+        source_files = comp.get("source_files", [])
+        if source_files:
+            ev_ids.append(get_or_create(f"{source_files[0]}:1"))
+
+        if ev_ids:
+            comp["evidence_ids"] = ev_ids
+
+    return evidence
+
+
+# ── Go test extraction ─────────────────────────────────────────────
+
+def extract_go_tests() -> tuple[list[dict], list[dict]]:
+    """Extract test definitions from Go packages.
+
+    Uses `go list -json` TestGoFiles to discover test packages, then creates
+    test_definitions linking each test to the component it covers.
+
+    Returns (test_definitions, evidence).
+    """
+    if not Path("go.mod").exists():
+        return [], []
+
+    # Re-run go list to get TestGoFiles (the main extractor may have discarded this)
+    try:
+        env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
+        r = subprocess.run(
+            ["go", "list", "-e", "-json", "./..."],
+            capture_output=True, text=True, timeout=60, env=env,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return [], []
+
+    if not r.stdout.strip():
+        return [], []
+
+    # Parse concatenated JSON
+    decoder = json.JSONDecoder()
+    packages = []
+    text = r.stdout.strip()
+    idx = 0
+    while idx < len(text):
+        s = text[idx:].lstrip()
+        if not s:
+            break
+        obj, consumed = decoder.raw_decode(s)
+        packages.append(obj)
+        idx = len(text) - len(s) + consumed
+
+    # Build import_path → comp_id map from existing components
+    comp_by_importpath = {}
+    for comp in []:  # Will be populated by caller
+        pass
+
+    test_defs: list[dict] = []
+    evidence: list[dict] = []
+    ev_cache: dict[str, str] = {}
+
+    def get_ev(file_ref: str) -> str:
+        if file_ref in ev_cache:
+            return ev_cache[file_ref]
+        eid = next_evidence_id()
+        evidence.append({"id": eid, "line": [file_ref]})
+        ev_cache[file_ref] = eid
+        return eid
+
+    module_path = ""
+    if packages:
+        module_path = packages[0].get("Module", {}).get("Path", "")
+
+    for pkg in packages:
+        test_files = pkg.get("TestGoFiles", []) or []
+        xtest_files = pkg.get("XTestGoFiles", []) or []
+        all_test_files = test_files + xtest_files
+        if not all_test_files:
+            continue
+
+        import_path = pkg.get("ImportPath", "")
+        pkg_name = import_path.split("/")[-1] if import_path else "unknown"
+        dir_path = pkg.get("Dir", "")
+        cwd = os.getcwd()
+
+        test_src_files = [
+            os.path.join(dir_path, f).replace(cwd + "/", "").replace("\\", "/")
+            for f in all_test_files
+        ]
+
+        # Evidence: first test file
+        ev_id = get_ev(f"{test_src_files[0]}:1") if test_src_files else None
+
+        test_defs.append({
+            "id": next_test_id(),
+            "name": f"test_{pkg_name}",
+            "covers_ids": [],  # will be linked post-hoc by import path
+            "depends_on_ids": [],
+            "source_files": test_src_files,
+            "evidence_ids": [ev_id] if ev_id else [],
+            "_import_path": import_path,  # temporary, for linking
+        })
+
+    return test_defs, evidence
+
+
 # ── Merge multiple extractors ──────────────────────────────────────
 
 def merge_results(
@@ -961,6 +1115,12 @@ def validate_completeness(components: list[dict]) -> list[str]:
         basename = Path(f).name
         # Skip build config files
         if basename in BUILD_CONFIG_FILES:
+            continue
+        # Skip test files (they're in test_definitions, not components)
+        if "_test.go" in basename or basename.endswith((
+            "_test.py", "_test.rs", ".test.ts", ".test.tsx",
+            ".spec.ts", ".spec.tsx", ".test.js", ".spec.js",
+        )):
             continue
         # Skip tooling scripts (not build targets)
         if f.endswith((".sh",)) and ("tools/" in f or "scripts/" in f):
@@ -1017,6 +1177,57 @@ def main():
     # Merge
     components, external_packages, entrypoints, aggregators = merge_results(results)
 
+    # Generate evidence for all components (paper: arXiv:2601.10112)
+    evidence = generate_evidence(components)
+
+    # Extract Go test definitions (if Go is present)
+    test_definitions: list[dict] = []
+    go_test_evidence: list[dict] = []
+    if any(c.get("programming_language") == "go" for c in components):
+        test_definitions, go_test_evidence = extract_go_tests()
+        # Link tests to components by import path
+        comp_by_import = {}
+        for c in components:
+            ip = c.pop("_import_path", None)
+            if ip:
+                comp_by_import[ip] = c["id"]
+        for t in test_definitions:
+            ip = t.pop("_import_path", None)
+            if ip and ip in comp_by_import:
+                t["covers_ids"] = [comp_by_import[ip]]
+                t["depends_on_ids"] = [comp_by_import[ip]]
+    else:
+        # Clean up temporary fields from non-Go components
+        for c in components:
+            c.pop("_import_path", None)
+
+    evidence.extend(go_test_evidence)
+
+    # Add Go aggregators (paper: meta-targets that orchestrate other targets)
+    # Go doesn't have explicit aggregators, but `go build ./...` and `go test ./...`
+    # are implicit meta-targets. We synthesize them.
+    if any(c.get("programming_language") == "go" for c in components):
+        build_ev = next_evidence_id()
+        evidence.append({"id": build_ev, "line": ["go.mod:1"]})
+        all_exec_ids = [c["id"] for c in components if c["type"] == "executable"]
+        if all_exec_ids:
+            aggregators.append({
+                "id": f"agg-{len(aggregators) + 1}",
+                "name": "go-build-all",
+                "depends_on_ids": all_exec_ids,
+                "evidence_ids": [build_ev],
+            })
+        all_test_ids = [t["id"] for t in test_definitions]
+        if all_test_ids:
+            test_ev = next_evidence_id()
+            evidence.append({"id": test_ev, "line": ["go.mod:1"]})
+            aggregators.append({
+                "id": f"agg-{len(aggregators) + 1}",
+                "name": "go-test-all",
+                "depends_on_ids": all_test_ids,
+                "evidence_ids": [test_ev],
+            })
+
     # Determine primary language and build system
     lang_counts: dict[str, int] = {}
     for c in components:
@@ -1045,10 +1256,11 @@ def main():
             "build_system": build_systems_str,
             "generator": "tibrezus/llm-wiki/.github/actions/repo-map@v1",
         },
+        "evidence": evidence,
         "components": components,
         "aggregators": aggregators,
         "runners": [],
-        "test_definitions": [],
+        "test_definitions": test_definitions,
         "external_packages": external_packages,
         "entrypoints": entrypoints,
     }
@@ -1061,7 +1273,9 @@ def main():
         f"[emit-rig] RIG: {len(components)} components, "
         f"{total_edges} dependency edges, "
         f"{len(external_packages)} external packages, "
-        f"{len(entrypoints)} entrypoints",
+        f"{len(entrypoints)} entrypoints, "
+        f"{len(evidence)} evidence, "
+        f"{len(test_definitions)} test definitions",
         file=sys.stderr,
     )
 

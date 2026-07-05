@@ -86,7 +86,10 @@ CRITICAL: You MUST actually read the RIG file before making any decisions. Do NO
       Example: 'machine — REST handlers for machine CRUD; depends on state store'
       Include the RIG comp-N ID as a comment.
       Model external_packages_ids as edges to external systems.
+      Annotate evidence (file:line refs from evidence_ids) and test coverage
+      (from test_definitions covers_ids) in descriptions where relevant.
    d. Generate views: context, containers, one component view per major container.
+      Mention aggregators (meta-targets like go-build-all) in system description.
 7. Run: likec4 format raw/arch/$PROJECT/
 8. Run: likec4 gen mermaid -o /tmp/mermaid raw/arch/$PROJECT/
 9. Update wiki pages that embed architecture diagrams for $PROJECT.
