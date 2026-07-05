@@ -71,17 +71,17 @@ clone_or_fetch_wiki() {
     local cache="$CACHE_DIR/repos/${name}-wiki"
 
     if [ -d "$cache" ]; then
-        # Cached — fetch delta and create worktree
+        # Cached — fetch delta into local branch ref, then worktree
         log "  fetching wiki (cached)…"
-        git -C "$cache" fetch origin "$branch" 2>&1 | tail -1 || true
+        git -C "$cache" fetch origin "$branch:refs/heads/$branch" 2>&1 | tail -1 || true
         git -C "$cache" worktree remove -f "$dest" 2>/dev/null || true
-        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>&1 | tail -1
+        git -C "$cache" worktree add --detach "$dest" "$branch" 2>&1 | tail -1
     else
-        # First run — clone to cache, then worktree
+        # First run — bare clone (branches stored as local refs/heads/*), then worktree
         log "  cloning wiki (first run, caching)…"
         mkdir -p "$CACHE_DIR/repos"
         git clone --bare "$url" "$cache" 2>&1 | tail -1 || return 1
-        git -C "$cache" worktree add --detach "$dest" "origin/$branch" 2>&1 | tail -1
+        git -C "$cache" worktree add --detach "$dest" "$branch" 2>&1 | tail -1
     fi
 }
 
