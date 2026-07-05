@@ -131,7 +131,7 @@ The controller runs as a **KEDA ScaledJob** (scale-to-zero when idle). Each pod
 gets a **Dapr sidecar** (state store + pub/sub via Valkey) and a **persistent
 PVC cache** (bare git clones, Go/npm module caches).
 
-```
+```text
 KEDA trigger (cron every 30m)
   │
   ├── Init: mkdir cache dirs on PVC
@@ -204,6 +204,7 @@ Uses `pi --print` with the llm-wiki skill and GLM-5.2 (via ZAI):
   Mermaid, commits
 
 After the agent pushes, a **CI self-healing loop** (up to 3 retries):
+
 1. `ci-monitor.sh` polls the CI run triggered by the push
 2. If CI fails, re-invokes the agent with:
    - `ci-consistency.sh` first (gating check — fixes drift via `bootstrap.sh`)
