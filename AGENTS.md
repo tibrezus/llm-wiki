@@ -117,12 +117,51 @@ rules defined in `instance/AGENTS.md`.
 
 ### Architecture (operator pattern)
 
-- **This module** ships the Helm chart (CRD, CronJob, RBAC), the controller
-  scripts (`reconcile.sh`, `agent-sync.sh`), the emitter scripts, and the
-  Dockerfile. This is **build logic** — HOW to generate RIGs and documentation.
+- **This module** ships the Helm chart (CRD, ScaledJob/CronJob, RBAC), the controller
+  scripts (`reconcile.sh`, `agent-sync.sh`, `ci-monitor.sh`), the universal emitter
+  (`emit-rig.py`), and the Dockerfile. This is **build logic** — HOW to generate
+  RIGs and documentation.
 - **k8s-config** installs the chart via HelmRelease and creates WikiMap CR
   instances + Flux GitRepository CRs. This is **runtime logic** — WHICH repos
   map WHERE.
+
+### Runtime: KEDA + Dapr + PVC Cache
+
+The controller runs as a **KEDA ScaledJob** (scale-to-zero when idle). Each pod
+gets a **Dapr sidecar** (state store + pub/sub via Valkey) and a **persistent
+PVC cache** (bare git clones, Go/npm module caches).
+
+```
+KEDA trigger (cron every 30m)
+  │
+  ├── Init: mkdir cache dirs on PVC
+  │
+  └── Pod (2 containers):
+       ├── daprd (Dapr sidecar) ──→ Valkey
+       │     localhost:3500/v1.0/state/statestore/{key}
+       │     localhost:3500/v1.0/publish/pubsub/{topic}
+       │
+       └── rig-controller:
+            ├── dapr_load → skip if revision unchanged (sub-ms)
+            ├── clone_or_fetch_wiki() → git fetch on PVC (sub-second)
+            ├── emit-rig.py → GOMODCACHE on PVC (no re-download)
+            ├── pi --print → agent generates docs
+            ├── ci-monitor.sh → polls CI status
+            ├── dapr_save revision + hash + component count
+            ├── dapr_publish "wiki.docs.updated"
+            └── POST /v1.0/shutdown → pod terminates
+```
+
+Helm chart values (independent toggles):
+
+| Value | Effect |
+|-------|--------|
+| `keda.enabled` | ScaledJob (event-driven, scale-to-zero) vs CronJob (fallback) |
+| `dapr.enabled` | Sidecar injection (state store + pub/sub abstraction) |
+| `cache.enabled` | PVC mount at /cache (bare clones, module caches) |
+| `sshKey.enabled` | SSH key for non-GitHub wiki push (Codeberg, Forgejo) |
+
+When Dapr is absent, all `dapr_*` calls are no-ops (graceful degradation).
 
 ### WikiMap CRD (`llm-wiki.dev/v1alpha1`)
 
@@ -132,7 +171,7 @@ spec:
   source:
     repo: <url-or-gitrepository-name>
     branch: main
-    language: go                 # required for lc4, omitted for generic
+    language: go                 # hint for field alignment; auto-detected by emit-rig.py
   destination:
     wikiRepo: <git-url>
     wikiBranch: main
@@ -145,11 +184,15 @@ status:
 ### reconcile.sh (deterministic phase)
 
 1. Lists WikiMap CRs via `kubectl get wikimaps`
-2. For each: resolves Flux artifact revision, skips if unchanged
-3. Downloads artifact (Flux source-controller or direct git clone)
-4. **LC4**: runs `emit-<lang>.sh` → `rig.json`, validates, pushes to wiki
-5. **Generic**: copies source to `raw/<project>/`, pushes to wiki
-6. Patches `WikiMap.status.lastProcessedRevision`
+2. For each: checks **Dapr state** first (`dapr_load NAME:processed_revision`),
+   skips if unchanged (sub-millisecond, no clone/emit needed)
+3. Falls back to K8s status check if Dapr absent
+4. Resolves Flux artifact revision, downloads if needed
+5. Fetches wiki repo via PVC bare clone (`clone_or_fetch_wiki`) —
+   first run clones, subsequent runs `git fetch` (sub-second)
+6. **LC4**: runs `emit-rig.py` → `rig.json`, validates, pushes to wiki
+7. **Generic**: copies source to `raw/<project>/`, pushes to wiki
+8. Saves state to Dapr (`dapr_save`) + patches `WikiMap.status`
 
 ### agent-sync.sh (LLM phase — runs if content changed)
 
@@ -160,8 +203,20 @@ Uses `pi --print` with the llm-wiki skill and GLM-5.2 (via ZAI):
 - **Generic**: reads new source material, creates/updates wiki pages with
   Mermaid, commits
 
-Env vars: `LLM_WIKI_ZAI_TOKEN` (ZAI API key from ExternalSecret/BSM),
-`LLM_WIKI_GITHUB_TOKEN` (wiki push auth from ExternalSecret/BSM).
+After the agent pushes, a **CI self-healing loop** (up to 3 retries):
+1. `ci-monitor.sh` polls the CI run triggered by the push
+2. If CI fails, re-invokes the agent with:
+   - `ci-consistency.sh` first (gating check — fixes drift via `bootstrap.sh`)
+   - `ci-lint.sh` for remaining errors
+3. Agent fixes, pushes, CI monitored again
+
+State is saved to Dapr after each phase: agent commit SHA, CI status,
+component count, edge count. The Dapr sidecar is shut down at the end
+(`POST /v1.0/shutdown`) so the pod terminates cleanly.
+
+Env vars: `LLM_WIKI_ZAI_TOKEN`, `LLM_WIKI_GITHUB_TOKEN`,
+`LLM_WIKI_CODEBERG_TOKEN`, `LLM_WIKI_RZC_TOKEN`,
+`CACHE_DIR` (/cache), `DAPR_STATE_STORE` (statestore), `DAPR_PUBSUB` (pubsub).
 
 ### Controller image
 

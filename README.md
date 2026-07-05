@@ -31,6 +31,22 @@ knowledge bases maintained by LLM agents. This repository provides three layers:
 - **k8s-config** owns **runtime logic**: which repos map to which wikis
   (WikiMap CR instances), Flux sources, secrets, network policies.
 
+### Runtime: KEDA + Dapr + PVC Cache
+
+The controller runs as a **KEDA ScaledJob** — scale-to-zero when idle, scale
+up on cron trigger. Each pod gets:
+
+- **Dapr sidecar** — state store + pub/sub abstraction (Valkey backend).
+  The agent uses `localhost:3500` HTTP API; never talks to Valkey directly.
+  Enables sub-ms skip checks (`dapr_load`) instead of full clone+emit.
+- **PVC cache** (local-path) — bare git clones, Go module cache, npm cache.
+  First run clones; subsequent runs `git fetch` (sub-second vs 5-10s clone).
+- **CI self-healing loop** — after the agent pushes, monitors CI. If CI fails,
+  re-invokes the agent with `ci-consistency.sh` + `ci-lint.sh` to fix and re-push.
+
+All three layers are independent Helm chart toggles (`keda.enabled`,
+`dapr.enabled`, `cache.enabled`) with graceful degradation when absent.
+
 ## Two Documentation Workflows
 
 Every wiki instance supports two workflows:
