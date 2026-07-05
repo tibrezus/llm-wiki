@@ -396,7 +396,19 @@ def extract_go() -> tuple[list[dict], list[dict], list[str], list[dict]]:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         print(f"[emit-rig] go list failed: {e}", file=sys.stderr)
-        return [], [], [], []
+        # Fallback: -find discovers packages without resolving imports.
+        # This gives us components (but no dependencies) when the module
+        # cache is cold. Better than returning nothing.
+        try:
+            env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
+            r = subprocess.run(
+                ["go", "list", "-e", "-json", "-find", "./..."],
+                capture_output=True, text=True, timeout=120, env=env,
+            )
+            print("[emit-rig] go list -find fallback used (no dep resolution)", file=sys.stderr)
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            print(f"[emit-rig] go list -find also failed: {e}", file=sys.stderr)
+            return [], [], [], []
 
     if not r.stdout.strip():
         if r.stderr.strip():
