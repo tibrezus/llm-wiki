@@ -39,6 +39,30 @@ properties:
         type: string
         description: Tool that produced this RIG (e.g. spade, llm-wiki-repo-map@v1).
     additionalProperties: false
+  evidence:
+    type: array
+    description: |
+      Build-system evidence entries (paper: arXiv:2601.10112).
+      Every node SHOULD reference at least one evidence entry via
+      evidence_ids, proving it is defined by the build system.
+    items:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        line:
+          type: array
+          description: GitHub-style file:line references.
+          items:
+            type: string
+        call_stack:
+          type: array
+          description: Ordered list of file:line refs (leaf first).
+          items:
+            type: string
+      additionalProperties: false
   components:
     type: array
     description: Buildable components (executables, libraries, packages).
@@ -82,6 +106,11 @@ properties:
                 type: string
               relative_path:
                 type: string
+        evidence_ids:
+          type: array
+          description: IDs of evidence entries backing this component.
+          items:
+            type: string
       additionalProperties: false
   aggregators:
     type: array
@@ -98,6 +127,11 @@ properties:
           type: string
         depends_on_ids:
           type: array
+          items:
+            type: string
+        evidence_ids:
+          type: array
+          description: IDs of evidence entries backing this aggregator.
           items:
             type: string
       additionalProperties: false
@@ -122,6 +156,11 @@ properties:
           type: array
           items:
             type: string
+        evidence_ids:
+          type: array
+          description: IDs of evidence entries backing this runner.
+          items:
+            type: string
       additionalProperties: false
   test_definitions:
     type: array
@@ -139,6 +178,26 @@ properties:
         covers_ids:
           type: array
           description: IDs of components this test exercises.
+          items:
+            type: string
+        depends_on_ids:
+          type: array
+          description: IDs of components this test depends on.
+          items:
+            type: string
+        components_being_tested_ids:
+          type: array
+          description: IDs of production components under test.
+          items:
+            type: string
+        source_files:
+          type: array
+          description: Test source files.
+          items:
+            type: string
+        evidence_ids:
+          type: array
+          description: IDs of evidence entries backing this test.
           items:
             type: string
       additionalProperties: false

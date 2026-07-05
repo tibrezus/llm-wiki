@@ -144,4 +144,26 @@ echo "--- wiki health check ---"
 python3 .llm-wiki/scripts/wiki-health.py wiki/
 
 echo ""
+echo "--- RIG compliance audit (paper: arXiv:2601.10112) ---"
+# Audit every committed RIG against the paper's standard.
+# ERROR-level checks (correctness) are gating — they indicate structural
+# defects (duplicate IDs, dangling refs, circular deps).
+# WARN-level checks (evidence, tests, aggregators) are informational —
+# we are working towards full compliance but do not block on them.
+RIG_COUNT=$(find raw/arch -name 'rig.json' 2>/dev/null | wc -l)
+if [ "$RIG_COUNT" -gt 0 ]; then
+    python3 .llm-wiki/scripts/arch/rig-compliance.py --all raw/arch/ 2>&1
+    # Exit 1 only if the auditor found ERROR-level issues (exit code 1).
+    # Exit code 0 = warnings only, 2 = --strict (not used here).
+    RC=$?
+    if [ "$RC" -eq 1 ]; then
+        echo "::error::RIG compliance audit found structural errors"
+        exit 1
+    fi
+    echo "OK ($RIG_COUNT RIG file(s) audited)"
+else
+    echo "OK (no RIG files)"
+fi
+
+echo ""
 echo "=== Lint Pipeline Complete ==="
