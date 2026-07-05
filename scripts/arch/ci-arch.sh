@@ -79,6 +79,9 @@ while IFS=$'\x1f' read -r NAME RIG_URL TOKEN_ENV; do
         continue
     fi
 
+    echo "RIG compliance audit (paper: arXiv:2601.10112)..."
+    python3 "$SCRIPT_DIR/rig-compliance.py" "$OUT" || true
+
     echo "OK: $OUT ($(wc -c < "$OUT") bytes)"
 done < <(python3 -c "
 import yaml

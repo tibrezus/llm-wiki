@@ -47,6 +47,17 @@ def validate_rig(rig_path):
             if "id" in node:
                 all_ids.add(node["id"])
 
+    # Duplicate ID check (paper: rig_validator._validate_duplicate_node_ids)
+    id_counts: dict[str, int] = {}
+    for key in ("components", "aggregators", "runners", "test_definitions", "external_packages"):
+        for node in rig.get(key, []):
+            nid = node.get("id")
+            if nid:
+                id_counts[nid] = id_counts.get(nid, 0) + 1
+    for nid, count in id_counts.items():
+        if count > 1:
+            errors.append(f"Duplicate node ID: '{nid}' used by {count} nodes")
+
     for comp in rig.get("components", []):
         for ref_key in ("depends_on_ids", "external_packages_ids"):
             for ref in comp.get(ref_key, []):
@@ -63,6 +74,39 @@ def validate_rig(rig_path):
     for ep in rig.get("entrypoints", []):
         if ep not in all_ids:
             errors.append(f"Dangling reference: entrypoints -> '{ep}' (not a known component)")
+
+    # Circular dependency check (paper: rig_validator._validate_circular_dependencies)
+    graph: dict[str, list[str]] = {}
+    for key in ("components", "aggregators", "runners"):
+        for node in rig.get(key, []):
+            nid = node.get("id", node.get("name", ""))
+            graph[nid] = node.get("depends_on_ids", [])
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n: WHITE for n in graph}
+    has_cycle = [False]
+
+    def _dfs(node):
+        color[node] = GRAY
+        for neighbor in graph.get(node, []):
+            if neighbor not in color:
+                continue
+            if color[neighbor] == GRAY:
+                has_cycle[0] = True
+                return
+            if color[neighbor] == WHITE:
+                _dfs(neighbor)
+                if has_cycle[0]:
+                    return
+        color[node] = BLACK
+
+    for node in graph:
+        if color[node] == WHITE:
+            _dfs(node)
+            if has_cycle[0]:
+                break
+    if has_cycle[0]:
+        errors.append("Circular dependency detected in component graph")
 
     return errors
 
