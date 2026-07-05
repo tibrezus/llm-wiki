@@ -38,9 +38,14 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # If Dapr isn't injected, these are no-ops (graceful degradation).
 
 DAPR_ENABLED=false
-if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
-    DAPR_ENABLED=true
-fi
+# Wait for Dapr sidecar to be ready (up to 30 seconds)
+for _ in $(seq 1 15); do
+    if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
+        DAPR_ENABLED=true
+        break
+    fi
+    sleep 2
+done
 
 dapr_save() {
     local key="$1" value="$2"
@@ -322,10 +327,10 @@ done
 log "Reconciliation complete."
 
 # ── Gracefully shut down the Dapr sidecar ──
-# Without this, the daprd container keeps running indefinitely after the main
-# container exits, preventing the Job/Pod from reaching Completed state.
-if $DAPR_ENABLED; then
-    log "Shutting down Dapr sidecar…"
-    curl -sf -X POST http://localhost:3500/v1.0/shutdown >/dev/null 2>&1 || true
-    sleep 3
-fi
+# Without this, the daprd container keeps running after the main container
+# exits, preventing the Job/Pod from completing.
+# Always attempt shutdown even if health check failed earlier (sidecar
+# may have become ready after the initial check).
+log "Shutting down Dapr sidecar…"
+curl -sf -X POST http://localhost:3500/v1.0/shutdown >/dev/null 2>&1 || true
+sleep 5
