@@ -156,7 +156,7 @@ for item in data['items']:
         dst.get('deployKeySecret', 'llm-wiki-deploy-key'),
         status.get('lastProcessedRevision', ''),
     ]))
-" | while IFS=$'\t' read -r NAME WORKFLOW SRC_REPO SRC_LANG SRC_BRANCH DST_WIKI DST_BRANCH DST_DIR DEPLOY_SECRET LAST_REV; do
+" | { while IFS=$'\t' read -r NAME WORKFLOW SRC_REPO SRC_LANG SRC_BRANCH DST_WIKI DST_BRANCH DST_DIR DEPLOY_SECRET LAST_REV; do
     log "=== $NAME ==="
     log "  workflow: $WORKFLOW\n  source:   $SRC_REPO ($SRC_LANG)"
 
@@ -312,7 +312,7 @@ print(sum(len(c.get('depends_on_ids',[])) for c in rig['components']))
         else
             log "  running agent sync ($WORKFLOW)…"
         fi
-        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" || {
+        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" </dev/null || {
             log "  WARN: agent sync failed (non-fatal)"
         }
 
@@ -323,6 +323,7 @@ print(sum(len(c.get('depends_on_ids',[])) for c in rig['components']))
 
     log "  DONE ✓"
 done
+}
 
 log "Reconciliation complete."
 

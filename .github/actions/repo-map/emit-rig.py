@@ -927,6 +927,51 @@ def extract_zig_with_native() -> tuple[list[dict], list[dict], list[str], list[d
 
 # ── Evidence generation (paper: arXiv:2601.10112) ─────────────────
 
+def extract_zig_tests(components: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Extract Zig test definitions by scanning source files for `test \"name\"` blocks.
+
+    Zig tests are inline blocks (not separate files), so we scan every
+    component's source files for `test \"...\" {` patterns.
+
+    Returns (test_definitions, evidence).
+    """
+    test_defs: list[dict] = []
+    evidence: list[dict] = []
+    ev_cache: dict[str, str] = {}
+
+    def get_ev(file_ref: str) -> str:
+        if file_ref in ev_cache:
+            return ev_cache[file_ref]
+        eid = next_evidence_id()
+        evidence.append({"id": eid, "line": [file_ref]})
+        ev_cache[file_ref] = eid
+        return eid
+
+    test_pattern = re.compile(r'^\s*test\s+"([^"]+)"', re.MULTILINE)
+
+    for comp in components:
+        for sf in comp.get("source_files", []):
+            try:
+                content = Path(sf).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            matches = test_pattern.findall(content)
+            if not matches:
+                continue
+            for i, test_name in enumerate(matches):
+                ev_id = get_ev(f"{sf}:1")
+                test_defs.append({
+                    "id": next_test_id(),
+                    "name": f"test_{test_name}",
+                    "covers_ids": [comp["id"]],
+                    "depends_on_ids": [comp["id"]],
+                    "source_files": [sf],
+                    "evidence_ids": [ev_id],
+                })
+
+    return test_defs, evidence
+
+
 def _detect_build_file() -> str | None:
     """Find the primary build system file, if any."""
     for f in ("go.mod", "build.zig", "Cargo.toml", "package.json", "pyproject.toml", "CMakeLists.txt"):
@@ -1202,6 +1247,33 @@ def main():
             c.pop("_import_path", None)
 
     evidence.extend(go_test_evidence)
+
+    # Extract Zig test definitions (if Zig is present)
+    if any(c.get("programming_language") == "zig" for c in components):
+        zig_tests, zig_ev = extract_zig_tests(components)
+        test_definitions.extend(zig_tests)
+        evidence.extend(zig_ev)
+        # Zig aggregators (meta-targets)
+        zig_build_ev = next_evidence_id()
+        evidence.append({"id": zig_build_ev, "line": ["build.zig:1"]})
+        all_exec_ids = [c["id"] for c in components if c["type"] == "executable"]
+        if all_exec_ids:
+            aggregators.append({
+                "id": f"agg-{len(aggregators) + 1}",
+                "name": "zig-build",
+                "depends_on_ids": all_exec_ids,
+                "evidence_ids": [zig_build_ev],
+            })
+        all_test_ids = [t["id"] for t in zig_tests]
+        if all_test_ids:
+            zig_test_ev = next_evidence_id()
+            evidence.append({"id": zig_test_ev, "line": ["build.zig:1"]})
+            aggregators.append({
+                "id": f"agg-{len(aggregators) + 1}",
+                "name": "zig-build-test",
+                "depends_on_ids": all_test_ids,
+                "evidence_ids": [zig_test_ev],
+            })
 
     # Add Go aggregators (paper: meta-targets that orchestrate other targets)
     # Go doesn't have explicit aggregators, but `go build ./...` and `go test ./...`
