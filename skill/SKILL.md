@@ -276,6 +276,11 @@ Run when `raw/arch/<project>/rig.json` has changed.
    Each C4 view becomes one Mermaid diagram. Embed all views on the wiki page.
 6. **Update wiki pages** — replace the embedded Mermaid blocks with the
    regenerated output.
+   **PRESERVE manual content**: Read the existing wiki page first. Only
+   replace the architecture diagram section (containing LikeC4-generated
+   Mermaid). Keep ALL manually-written sections — deployment notes,
+   configuration examples, manual architecture insights, operational runbooks.
+   If unsure whether a section is agent-generated or manual, preserve it.
 7. **Update `sources:`** with `raw/arch/<project>/rig.json`.
 8. **Update `index.md`** and **append to `log.md`** with operation `arch-sync`.
 9. **Validate**: `npm run check` (CI also validates the LikeC4 model).

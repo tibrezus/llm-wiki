@@ -492,6 +492,27 @@ Chronological append-only log:
 - **Never leave a page without frontmatter**
 - **Never create a page without `## See Also`**
 - **Never skip updating `index.md`** after page changes
+
+## Agent-Generated vs Manual Content
+
+Wiki pages for LC4 projects contain two types of content:
+
+1. **Agent-generated** (managed by `arch-sync`):
+   - The `## Architecture (C4D2 — RIG + LikeC4)` section
+   - All embedded Mermaid diagrams derived from the LikeC4 model
+   - Component descriptions traceable to RIG IDs
+
+2. **Manual** (human-authored, preserved across syncs):
+   - Everything else — deployment notes, configuration examples,
+     operational runbooks, performance benchmarks, ADRs
+
+**The agent preserves manual content.** Only the architecture diagram
+section is replaced on each sync. Humans can safely add sections anywhere
+outside the `## Architecture (C4D2 — RIG + LikeC4)` block — they will
+survive every `arch-sync` run.
+
+If you need to annotate or correct the architecture section, add a separate
+`## Architecture Notes` section instead of editing the generated one.
 - **Never skip appending to `log.md`** after any operation
 - **Never use LikeC4 models in the Generic workflow** — Mermaid only
 - **Never hand-write Mermaid for C4 architecture diagrams** — generate from

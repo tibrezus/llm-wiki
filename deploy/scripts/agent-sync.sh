@@ -93,6 +93,14 @@ CRITICAL: You MUST actually read the RIG file before making any decisions. Do NO
 7. Run: likec4 format raw/arch/$PROJECT/
 8. Run: likec4 gen mermaid -o /tmp/mermaid raw/arch/$PROJECT/
 9. Update wiki pages that embed architecture diagrams for $PROJECT.
+   CRITICAL: Read the existing wiki page FIRST (cat wiki/entities/$PROJECT.md).
+   Preserve ALL manually-written sections — only replace the architecture
+   diagram section (the one containing Mermaid blocks generated from LikeC4).
+   If a human added deployment notes, configuration examples, or manual
+   architecture insights, KEEP them. Only the '## Architecture (C4D2 — RIG +
+   LikeC4)' section and embedded Mermaid blocks should be replaced.
+   If the page has no architecture section yet, insert one after the
+   frontmatter and first introductory paragraph.
 10. Update index.md and append to log.md with operation 'arch-sync'.
     Include the actual component count in the log entry.
 11. Commit: git add -A && git commit -m 'docs(arch-sync): $PROJECT'
