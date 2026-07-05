@@ -211,17 +211,24 @@ for attempt in $(seq 1 "$MAX_CI_RETRIES"); do
 
             FIX_PROMPT="You are working in the wiki repository at $WIKI_DIR.
 
-Your previous commit (${COMMIT_SHA:0:12}) FAILED CI. The wiki CI pipeline checks:
-  markdownlint, mdlint-obsidian, remark frontmatter schema,
-  Mermaid render check, LikeC4 format check,
-  unique filenames, raw/ immutability, and wiki health.
+Your previous commit (${COMMIT_SHA:0:12}) FAILED CI. The wiki CI pipeline runs:
+  1. Consistency check (generated files vs config + submodule sync)
+  2. markdownlint, mdlint-obsidian, remark frontmatter schema
+  3. Mermaid render check, LikeC4 format check
+  4. Unique filenames, raw/ immutability, wiki health
 
-Find and fix every error:
-1. Run the lint pipeline: bash .llm-wiki/scripts/ci-lint.sh
-2. Read the error output carefully.
-3. Fix every error in the relevant files.
-4. Re-run the lint to confirm: bash .llm-wiki/scripts/ci-lint.sh
-5. When all errors are fixed, commit and push:
+The consistency check gates all other steps — if it fails, lint is skipped.
+Fix the ROOT CAUSE, not just symptoms:
+
+1. Run the consistency check first: bash .llm-wiki/scripts/ci-consistency.sh
+   If it reports DRIFT, run: bash .llm-wiki/scripts/bootstrap.sh
+   This regenerates files from the submodule (AGENTS.md, .markdownlint.yaml, etc.)
+2. Run the lint pipeline: bash .llm-wiki/scripts/ci-lint.sh
+3. Read the error output carefully.
+4. Fix every error in the relevant files.
+5. Re-run BOTH checks to confirm:
+   bash .llm-wiki/scripts/ci-consistency.sh && bash .llm-wiki/scripts/ci-lint.sh
+6. When all errors are fixed, commit and push:
    git add -A && git commit -m 'fix: resolve CI lint failures' && git push origin main
 
 Do NOT modify files in raw/. Follow the wiki schema in AGENTS.md."
