@@ -382,21 +382,25 @@ def extract_go() -> tuple[list[dict], list[dict], list[str], list[dict]]:
         env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
         subprocess.run(
             ["go", "mod", "download"],
-            capture_output=True, text=True, timeout=120, env=env,
+            capture_output=True, text=True, timeout=300, env=env,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        print(f"[emit-rig] go mod download warning: {e}", file=sys.stderr)
         pass  # continue anyway — go list -e handles missing deps
 
     try:
         env = dict(os.environ, GOFLAGS="-mod=mod", GOWORK="off")
         r = subprocess.run(
             ["go", "list", "-e", "-json", "./..."],
-            capture_output=True, text=True, timeout=60, env=env,
+            capture_output=True, text=True, timeout=180, env=env,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        print(f"[emit-rig] go list failed: {e}", file=sys.stderr)
         return [], [], [], []
 
     if not r.stdout.strip():
+        if r.stderr.strip():
+            print(f"[emit-rig] go list stderr: {r.stderr[:500]}", file=sys.stderr)
         return [], [], [], []
 
     # Parse concatenated JSON objects
