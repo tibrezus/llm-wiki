@@ -175,9 +175,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             record_k8s_event(project, data)
         except Exception as e:  # noqa: BLE001
             log(f"WARN: handler error: {e}")
-        # Always 200: recording an event is idempotent side-effect; redelivery
-        # would at worst create a duplicate Event, so never ask Dapr to retry.
-        self._send(200, {"status": "recorded"})
+        # Dapr pub/sub app response contract: return {"status":"SUCCESS"} to
+        # ACK the message. Any other status (or none) is treated as retriable,
+        # causing Dapr to redeliver forever. Recording is idempotent, so even
+        # a redelivered event only creates a duplicate K8s Event — but we ACK
+        # properly to avoid the redelivery storm.
+        self._send(200, {"status": "SUCCESS"})
 
     def log_message(self, fmt, *args):  # noqa: A003
         pass  # silence default access log
