@@ -19,13 +19,13 @@ to the declared route. Standard library only — no pip dependencies.
 import http.server
 import json
 import os
+import socket
 import ssl
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-LISTEN_ADDR = "0.0.0.0"
 LISTEN_PORT = int(os.environ.get("PORT", "8080"))
 NAMESPACE = os.environ.get("NAMESPACE", "llm-wiki")
 PUBSUB_NAME = os.environ.get("DAPR_PUBSUB", "pubsub")
@@ -130,6 +130,26 @@ def record_k8s_event(project, data):
         log(f"WARN: could not record K8s Event (status={status}): {body[:300]}")
 
 
+class DualStackServer(http.server.ThreadingHTTPServer):
+    """ThreadingHTTPServer that listens on both IPv4 and IPv6.
+
+    Clusters with IPv6 pod IPs (fd00:...) send kubelet probes to the pod's IPv6
+    address; binding 0.0.0.0 (IPv4-only) makes those probes fail. Binding '::'
+    with IPV6_V6ONLY=0 is dual-stack on Linux, so both the kubelet's IPv6 probe
+    and Dapr's 127.0.0.1 loopback delivery work.
+    """
+
+    address_family = socket.AF_INET6
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except OSError:
+            pass  # not IPv6 or option unsupported — best effort
+        super().server_bind()
+
+
+# defined below — placeholder satisfied by module load order
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -187,9 +207,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    log(f"starting on {LISTEN_ADDR}:{LISTEN_PORT} (namespace={NAMESPACE})")
+    log(f"starting on [::]:{LISTEN_PORT} (dual-stack, namespace={NAMESPACE})")
     log(f"subscribed to pubsub={PUBSUB_NAME} topic={TOPIC} -> /events")
-    httpd = http.server.ThreadingHTTPServer((LISTEN_ADDR, LISTEN_PORT), Handler)
+    httpd = DualStackServer(("::", LISTEN_PORT), Handler)
     httpd.serve_forever()
 
 
