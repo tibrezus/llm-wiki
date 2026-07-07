@@ -42,6 +42,7 @@ RUN npm install -g @earendil-works/pi-coding-agent likec4
 COPY deploy/scripts/reconcile.sh         /usr/local/bin/reconcile.sh
 COPY deploy/scripts/agent-sync.sh        /usr/local/bin/agent-sync.sh
 COPY deploy/scripts/ci-monitor.sh        /usr/local/bin/ci-monitor.sh
+COPY deploy/scripts/event-subscriber.py  /usr/local/bin/event-subscriber.py
 COPY .github/actions/repo-map/emit-rig.sh /emitters/emit-rig.sh
 COPY .github/actions/repo-map/emit-rig.py /emitters/emit-rig.py
 COPY schemas/repo-map.schema.yaml        /schema/repo-map.schema.yaml

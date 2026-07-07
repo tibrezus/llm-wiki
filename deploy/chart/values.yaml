@@ -71,5 +71,23 @@ cache:
   enabled: false
   pvcName: "llm-wiki-cache"
 
+# Event subscriber — always-on Dapr pub/sub consumer for the
+# `wiki.docs.updated` topic. Records a Kubernetes Event on the source WikiMap
+# for every successful doc sync, making pipeline activity observable via
+# `kubectl get events`. Must be enabled for the event bus to have a consumer:
+# Redis pub/sub is fire-and-forget (no retention), so the subscriber must be
+# online when events fire.
+subscriber:
+  enabled: false
+  port: 8080
+  pubsub: pubsub
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
 # Extra environment variables injected into the agent pods.
 extraEnv: []

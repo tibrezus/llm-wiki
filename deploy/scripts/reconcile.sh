@@ -76,10 +76,18 @@ clone_or_fetch_wiki() {
     local cache="$CACHE_DIR/repos/${name}-wiki"
 
     if [ -d "$cache" ]; then
-        # Cached — fetch delta into local branch ref, then worktree
+        # Cached — prune stale worktrees, fetch delta, then a fresh worktree.
+        # `worktree prune` is essential: temp worktrees are rm -rf'd on pod exit
+        # (the EXIT trap), but their metadata persists in the bare clone on the
+        # PVC. A stale entry that still has $branch "checked out" makes the
+        # fetch refuse ("refusing to fetch into branch ... checked out at ..."),
+        # leaving refs/heads/$branch stale — so the subsequent push is rejected
+        # as non-fast-forward. This was the root cause of the recurring
+        # "FAILED: push error" on Codeberg-backed wikis (e.g. rhesadox).
         log "  fetching wiki (cached)…"
-        git -C "$cache" fetch origin "$branch:refs/heads/$branch" 2>&1 | tail -1 || true
+        git -C "$cache" worktree prune
         git -C "$cache" worktree remove -f "$dest" 2>/dev/null || true
+        git -C "$cache" fetch origin "+$branch:refs/heads/$branch" 2>&1 | tail -1 || true
         git -C "$cache" worktree add --detach "$dest" "$branch" 2>&1 | tail -1
     else
         # First run — bare clone (branches stored as local refs/heads/*), then worktree

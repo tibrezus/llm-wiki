@@ -16,4 +16,9 @@ rules:
   - apiGroups: ["source.toolkit.fluxcd.io"]
     resources: ["gitrepositories"]
     verbs: ["get", "list"]
+  # Create Kubernetes Events (used by the event subscriber to surface doc
+  # syncs on the WikiMap CR; also used by reconcile for status events).
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
 {{- end }}
