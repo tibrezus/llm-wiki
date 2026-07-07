@@ -43,9 +43,14 @@ up on cron trigger. Each pod gets:
   First run clones; subsequent runs `git fetch` (sub-second vs 5-10s clone).
 - **CI self-healing loop** — after the agent pushes, monitors CI. If CI fails,
   re-invokes the agent with `ci-consistency.sh` + `ci-lint.sh` to fix and re-push.
+- **Event subscriber** (always-on Deployment) — consumes the `wiki.docs.updated`
+  pub/sub event published at the end of every successful reconcile and records a
+  Kubernetes Event (`reason: DocsSynced`) on the source `WikiMap`, making the
+  pipeline observable via `kubectl get events`. First consumer of the event bus.
 
-All three layers are independent Helm chart toggles (`keda.enabled`,
-`dapr.enabled`, `cache.enabled`) with graceful degradation when absent.
+All four layers are independent Helm chart toggles (`keda.enabled`,
+`dapr.enabled`, `cache.enabled`, `subscriber.enabled`) with graceful
+degradation when absent.
 
 ## Two Documentation Workflows
 

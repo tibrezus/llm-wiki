@@ -129,14 +129,17 @@ rules defined in `instance/AGENTS.md`.
 
 The controller runs as a **KEDA ScaledJob** (scale-to-zero when idle). Each pod
 gets a **Dapr sidecar** (state store + pub/sub via Valkey) and a **persistent
-PVC cache** (bare git clones, Go/npm module caches).
+PVC cache** (bare git clones, Go/npm module caches). A separate **always-on
+event-subscriber Deployment** consumes the `wiki.docs.updated` topic (Redis
+pub/sub is fire-and-forget, so the consumer must be online continuously — it
+cannot live inside the scale-to-zero controller).
 
 ```text
 KEDA trigger (cron every 30m)
   │
   ├── Init: mkdir cache dirs on PVC
   │
-  └── Pod (2 containers):
+  └── Controller Pod (transient, 2 containers):
        ├── daprd (Dapr sidecar) ──→ Valkey
        │     localhost:3500/v1.0/state/statestore/{key}
        │     localhost:3500/v1.0/publish/pubsub/{topic}
@@ -148,9 +151,22 @@ KEDA trigger (cron every 30m)
             ├── pi --print → agent generates docs
             ├── ci-monitor.sh → polls CI status
             ├── dapr_save revision + hash + component count
-            ├── dapr_publish "wiki.docs.updated"
-            └── POST /v1.0/shutdown → pod terminates
+            ├── dapr_publish "wiki.docs.updated"  ──┐
+            └── POST /v1.0/shutdown → pod terminates │
+                                                     ▼  (Valkey pub/sub)
+  Event-subscriber Deployment (always-on, 1 replica):
+       ├── daprd (Dapr sidecar) — subscribed to wiki.docs.updated
+       └── event-subscriber.py:
+            ├── receives each doc-sync event
+            └── records a Kubernetes Event (reason: DocsSynced) on the
+                source WikiMap → `kubectl get events` / `kubectl describe
+                wikimap <name>`
 ```
+
+This is step 1 of the move from cron-batch to event-driven operation: the
+subscriber is the first real consumer of the event bus, proving the Dapr
+pub/sub path end-to-end and giving operators a visible audit trail. Later
+steps add a durable ledger and a KEDA trigger driven by these events.
 
 Helm chart values (independent toggles):
 
@@ -160,8 +176,30 @@ Helm chart values (independent toggles):
 | `dapr.enabled` | Sidecar injection (state store + pub/sub abstraction) |
 | `cache.enabled` | PVC mount at /cache (bare clones, module caches) |
 | `sshKey.enabled` | SSH key for non-GitHub wiki push (Codeberg, Forgejo) |
+| `subscriber.enabled` | Always-on event-subscriber Deployment (consumes `wiki.docs.updated`) |
 
-When Dapr is absent, all `dapr_*` calls are no-ops (graceful degradation).
+When Dapr is absent, all `dapr_*` calls are no-ops (graceful degradation), and
+the event subscriber has nothing to consume (it still runs but receives no
+events).
+
+### Event subscriber (`event-subscriber.py`)
+
+The `wiki.docs.updated` event published at the end of every successful
+reconcile needs a consumer, or it is silently dropped (Redis pub/sub retains
+messages in a stream only as long as a consumer is subscribed). The subscriber
+is a stdlib-only Python HTTP server deployed as an always-on Deployment:
+
+- **Discovery**: Dapr reads `GET /dapr/subscribe` and subscribes the app to
+  `pubsub` / `wiki.docs.updated`, delivering each event to `POST /events`.
+- **Acknowledgement**: the handler returns `{"status":"SUCCESS"}` per the Dapr
+  pub/sub app-callback contract — any other status is treated as retriable and
+  causes an infinite redelivery loop.
+- **Effect**: for each event it creates a Kubernetes `Event` (reason
+  `DocsSynced`) on the source `WikiMap` CR via the in-cluster API, surfacing
+  every doc sync as `kubectl get events` / `kubectl describe wikimap <name>`.
+- **RBAC**: needs `events` `create`/`patch` (added to the controller `Role`).
+- **Dual-stack**: binds `::` (IPv6 with `IPV6_V6ONLY=0`) so kubelet's IPv6 pod-IP
+  liveness probe and Dapr's `127.0.0.1` loopback delivery both work.
 
 ### WikiMap CRD (`llm-wiki.dev/v1alpha1`)
 
