@@ -20,6 +20,13 @@ filing, and bookkeeping.
 
 Never skip these files. They define the wiki's structure.
 
+> **How the docs pipeline is built & run** (the RIG controller, KEDA/Dapr
+> scheduling, the PVC cache, the event bus) lives in the **module's**
+> `AGENTS.md` / `README.md` (the `.llm-wiki` submodule), not here. You do not
+> need it to edit wiki content or run `arch-sync`; consult it only if asked
+> how the system itself works. This skill covers *operations*; the module
+> covers *architecture*.
+
 ## Repository Layout
 
 ```text
