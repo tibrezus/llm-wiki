@@ -513,6 +513,7 @@ survive every `arch-sync` run.
 
 If you need to annotate or correct the architecture section, add a separate
 `## Architecture Notes` section instead of editing the generated one.
+
 - **Never skip appending to `log.md`** after any operation
 - **Never use LikeC4 models in the Generic workflow** — Mermaid only
 - **Never hand-write Mermaid for C4 architecture diagrams** — generate from
