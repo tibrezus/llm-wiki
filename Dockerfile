@@ -58,7 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # github.com/tibrezus/harmostes — drives one warm pi session: task → gate →
 # feedback-as-session-continuation.
 RUN curl -fsSL https://raw.githubusercontent.com/tibrezus/harmostes/main/harmostes.py \
-        -o /usr/local/bin/harmostes.py && chmod +x /usr/local/bin/harmostes.py
+        -o /usr/local/bin/harmostes.py && chmod +x /usr/local/bin/harmostes.py \
+    && ln -sf /usr/local/bin/harmostes.py /usr/local/bin/harmostes
 
 # Emitter scripts + reconcile + agent logic + CI monitor
 COPY deploy/scripts/reconcile.sh         /usr/local/bin/reconcile.sh

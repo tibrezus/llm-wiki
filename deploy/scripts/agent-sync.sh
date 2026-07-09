@@ -26,7 +26,6 @@ WIKI_DIR="${1:?Usage: agent-sync.sh <wiki-dir> <project> [workflow] [dst-branch]
 PROJECT="${2:?Usage: agent-sync.sh <wiki-dir> <project> [workflow] [dst-branch]}"
 WORKFLOW="${3:-lc4}"
 DST_BRANCH="${4:-main}"
-HARMOSTES="${HARMOSTES:-harmostes}"
 MAX_FIXES="${AGENT_FIX_RETRIES:-3}"
 TIMEOUT="${AGENT_TIMEOUT:-1800}"
 
@@ -44,9 +43,18 @@ else
 fi
 
 command -v pi >/dev/null 2>&1 || { log "ERROR: pi not found on PATH"; exit 1; }
-# Resolve the harmostes binary (on PATH, else the baked-in .py in the image)
-if ! command -v "$HARMOSTES" >/dev/null 2>&1; then
-    HARMOSTES="python3 /usr/local/bin/harmostes.py"
+# Resolve the harmostes binary into an ARRAY so a "python3 /path/harmostes.py"
+# value word-splits correctly. (A quoted scalar would be treated as one command
+# name including the space → exit 127.) Honors $HARMOSTES, else 'harmostes' on
+# PATH, else the baked-in /usr/local/bin/harmostes.py.
+if [ -n "${HARMOSTES:-}" ]; then
+    read -ra HARMOSTES_CMD <<<"$HARMOSTES"
+elif command -v harmostes >/dev/null 2>&1; then
+    HARMOSTES_CMD=(harmostes)
+elif [ -x /usr/local/bin/harmostes.py ]; then
+    HARMOSTES_CMD=(python3 /usr/local/bin/harmostes.py)
+else
+    log "ERROR: harmostes not found (tried \${HARMOSTES:-<unset>}, harmostes, /usr/local/bin/harmostes.py)"; exit 1
 fi
 
 # ── Build the task prompt ────────────────────────────────────────────────────
@@ -152,7 +160,7 @@ fi
 # Exit 0 = gate green; 1 = failed after N fixes; 2 = pi/gate error.
 log "starting harmostes-orchestrated agent sync…"
 set +e
-"$HARMOSTES" task \
+"${HARMOSTES_CMD[@]}" task \
     --skill /skills/wiki/SKILL.md \
     --model "$MODEL" \
     --tools read,bash,edit,grep \
