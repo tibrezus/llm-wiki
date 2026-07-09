@@ -188,7 +188,18 @@ if [ "$HARMOSTES_RC" -ne 0 ]; then
 fi
 
 log "gate GREEN — pushing $PROJECT"
-git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed"
+# Rebase the agent's commits onto the latest origin/DST_BRANCH before pushing:
+# the agent can run for several minutes, during which the wiki's branch may
+# advance (another project's arch-sync, a manual edit). Replay on top to avoid
+# a non-fast-forward rejection. The worktree is detached, so rebase creates a
+# new detached HEAD at the rebased commits — fine for `push HEAD:refs/heads/…`.
+git fetch origin "$DST_BRANCH" 2>/dev/null || true
+if git rebase "origin/$DST_BRANCH" 2>/dev/null; then
+    git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed (non-fast-forward after rebase?)"
+else
+    git rebase --abort 2>/dev/null || true
+    log "WARN: rebase onto origin/$DST_BRANCH conflicted — NOT pushing (concurrent wiki edit touched same files)"
+fi
 
 COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
