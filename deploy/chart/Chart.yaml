@@ -5,8 +5,8 @@ description: >
   Watches WikiMap CRs, sources project repos via Flux, generates RIGs, and
   pushes them to wiki repositories.
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 keywords:
   - llm-wiki
   - rig

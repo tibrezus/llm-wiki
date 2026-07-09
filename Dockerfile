@@ -38,9 +38,32 @@ RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${Z
 # pi.dev harness + LikeC4
 RUN npm install -g @earendil-works/pi-coding-agent likec4
 
+# Lint tools — the agent's LOCAL validation gate (gate-lint.sh → ci-lint.sh) runs
+# the full pipeline in-pod: markdownlint, mdlint-obsidian, remark frontmatter,
+# mermaid render-check (headless Chromium), likec4, wiki-health, RIG compliance.
+# Baked in so the gate is fast + self-contained; ci-lint's install_all_lint_tools
+# is idempotent and skips whatever is already present.
+# apt FIRST: mermaid-cli's postinstall (puppeteer Chrome download) needs unzip
+# to extract, and mmdc needs the Chromium shared libs at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        unzip libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 \
+        libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
+        libpango-1.0-0 libcairo2 libasound2 fonts-liberation \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && npm install -g markdownlint-cli2 @mermaid-js/mermaid-cli \
+    && npx -y puppeteer browsers install chrome \
+    && python3 -m pip install --no-cache-dir --break-system-packages pyyaml mdlint-obsidian
+
+# harmostes — the shared pi RPC orchestrator (agent-sync's gate-feedback engine).
+# github.com/tibrezus/harmostes — drives one warm pi session: task → gate →
+# feedback-as-session-continuation.
+RUN curl -fsSL https://raw.githubusercontent.com/tibrezus/harmostes/main/harmostes.py \
+        -o /usr/local/bin/harmostes.py && chmod +x /usr/local/bin/harmostes.py
+
 # Emitter scripts + reconcile + agent logic + CI monitor
 COPY deploy/scripts/reconcile.sh         /usr/local/bin/reconcile.sh
 COPY deploy/scripts/agent-sync.sh        /usr/local/bin/agent-sync.sh
+COPY deploy/scripts/gate-lint.sh         /usr/local/bin/gate-lint.sh
 COPY deploy/scripts/ci-monitor.sh        /usr/local/bin/ci-monitor.sh
 COPY deploy/scripts/event-subscriber.py  /usr/local/bin/event-subscriber.py
 COPY .github/actions/repo-map/emit-rig.sh /emitters/emit-rig.sh
@@ -51,6 +74,6 @@ COPY scripts/arch/validate-rig.py        /usr/local/bin/validate-rig.py
 # The llm-wiki skill (for the pi agent to follow)
 COPY skill/SKILL.md                      /skills/wiki/SKILL.md
 
-RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /usr/local/bin/ci-monitor.sh /emitters/emit-rig.sh
+RUN chmod +x /usr/local/bin/reconcile.sh /usr/local/bin/agent-sync.sh /usr/local/bin/gate-lint.sh /usr/local/bin/ci-monitor.sh /emitters/emit-rig.sh
 
 ENTRYPOINT ["/usr/local/bin/reconcile.sh"]

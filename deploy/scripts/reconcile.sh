@@ -320,7 +320,7 @@ print(sum(len(c.get('depends_on_ids',[])) for c in rig['components']))
         else
             log "  running agent sync ($WORKFLOW)…"
         fi
-        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" </dev/null || {
+        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" "$DST_BRANCH" </dev/null || {
             log "  WARN: agent sync failed (non-fatal)"
         }
 

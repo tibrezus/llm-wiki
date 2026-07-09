@@ -1,41 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# agent-sync.sh — the LLM-driven documentation step.
+# agent-sync.sh — the LLM-driven documentation step, orchestrated by harmostes.
 #
-# Runs AFTER reconcile.sh pushes changed content. Uses the pi.dev harness with
-# the llm-wiki skill and GLM-5.2 (via ZAI) to transform deterministic inputs
-# into wiki documentation.
+# Runs AFTER reconcile.sh pushes changed content. harmostes (github.com/tibrezus/
+# harmostes) drives ONE warm pi RPC session: the agent does arch-sync/update
+# (read RIG/sources → update model/mermaid/pages → COMMIT, no push), harmostes
+# runs gate-lint.sh (the full LOCAL lint pipeline — the same one remote CI runs),
+# and on failure feeds the lint errors back to the SAME session up to MAX_FIXES.
+# Only a green gate is pushed.
 #
-# The workflow type determines what the LLM does:
-#   lc4     — reads the updated RIG, updates the LikeC4 model + Mermaid diagrams
-#   generic — reads new raw source material, creates/updates wiki pages
+# This replaces the old `pi --print` + remote-CI-polling (ci-monitor.sh) loop:
+#   - validation is now a local, in-process gate (no remote CI round-trip)
+#   - feedback is a warm-session continuation (the agent keeps context)
+#   - every tool call is observable (harmostes logs tool_execution events)
+#   - a tool allowlist (read/bash/edit/grep) scopes the agent
 #
-# After the agent pushes, a CI self-healing loop kicks in:
-#   1. ci-monitor.sh polls the CI run triggered by the push
-#   2. If CI fails, the agent is re-invoked with "run lint, fix errors, push"
-#   3. Repeat up to MAX_CI_RETRIES times
-#
-# Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]
-#
-# Environment:
-#   LLM_WIKI_ZAI_TOKEN — ZAI API key (injected from ExternalSecret)
-#   LLM_WIKI_GITHUB_TOKEN — GitHub PAT (for GitHub wiki CI monitoring)
-#   LLM_WIKI_CODEBERG_TOKEN — Codeberg token (for Codeberg CI monitoring)
+# Usage: agent-sync.sh <wiki-dir> <project-name> [workflow] [dst-branch]
+# Env:   LLM_WIKI_ZAI_TOKEN — ZAI API key
+#        HARMOSTES — harmostes binary (default: harmostes, fallback /usr/local/bin/harmostes.py)
+#        AGENT_FIX_RETRIES — max gate-feedback attempts (default 3)
+#        AGENT_TIMEOUT — per-turn timeout seconds (default 1800)
 
-WIKI_DIR="${1:?Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]}"
-PROJECT="${2:?Usage: agent-sync.sh <wiki-dir> <project-name> [workflow]}"
+WIKI_DIR="${1:?Usage: agent-sync.sh <wiki-dir> <project> [workflow] [dst-branch]}"
+PROJECT="${2:?Usage: agent-sync.sh <wiki-dir> <project> [workflow] [dst-branch]}"
 WORKFLOW="${3:-lc4}"
-
-# CI self-healing configuration
-MAX_CI_RETRIES=3
-CI_POLL_WAIT=300   # max seconds to wait for CI per attempt
+DST_BRANCH="${4:-main}"
+HARMOSTES="${HARMOSTES:-harmostes}"
+MAX_FIXES="${AGENT_FIX_RETRIES:-3}"
+TIMEOUT="${AGENT_TIMEOUT:-1800}"
 
 log() { echo "[agent-sync] $(date -u +%H:%M:%S) $*"; }
 
 [ -d "$WIKI_DIR" ] || { log "ERROR: wiki dir $WIKI_DIR not found"; exit 1; }
 
-# Configure ZAI API
 if [ -n "${LLM_WIKI_ZAI_TOKEN:-}" ]; then
     export ZAI_API_KEY="$LLM_WIKI_ZAI_TOKEN"
     MODEL="zai/glm-5.2"
@@ -46,22 +44,26 @@ else
 fi
 
 command -v pi >/dev/null 2>&1 || { log "ERROR: pi not found on PATH"; exit 1; }
+# Resolve the harmostes binary (on PATH, else the baked-in .py in the image)
+if ! command -v "$HARMOSTES" >/dev/null 2>&1; then
+    HARMOSTES="python3 /usr/local/bin/harmostes.py"
+fi
 
-WIKI_REPO=$(cd "$WIKI_DIR" && git remote get-url origin 2>/dev/null || echo "")
-
-# Build the prompt based on workflow type
+# ── Build the task prompt ────────────────────────────────────────────────────
 if [ "$WORKFLOW" = "lc4" ]; then
     [ -f "$WIKI_DIR/raw/arch/$PROJECT/rig.json" ] || {
         log "ERROR: no RIG for $PROJECT at raw/arch/$PROJECT/rig.json"; exit 1
     }
+    cat > "/tmp/agent-sync-${PROJECT}-task.txt" <<PROMPT
+You are working in the wiki repository at $WIKI_DIR.
 
-    PROMPT="You are working in the wiki repository at $WIKI_DIR.
-
-The RIG for '$PROJECT' at raw/arch/$PROJECT/rig.json has just been updated by the RIG controller (a deterministic build-system analysis tool).
+The RIG for '$PROJECT' at raw/arch/$PROJECT/rig.json has just been updated by the
+RIG controller (a deterministic build-system analysis tool).
 
 Your task: keep the architecture documentation current.
 
-CRITICAL: You MUST actually read the RIG file before making any decisions. Do NOT assume the content based on previous runs. Read it fresh every time.
+CRITICAL: You MUST actually read the RIG file before making any decisions. Do NOT
+assume the content based on previous runs. Read it fresh every time.
 
 1. Read AGENTS.md for the wiki schema and the LC4 workflow.
 2. Read the skill at /skills/wiki/SKILL.md — specifically the 'arch-sync' command.
@@ -74,45 +76,44 @@ CRITICAL: You MUST actually read the RIG file before making any decisions. Do NO
    - CHANGED (modified dependencies, renamed, type changed)
    If the RIG component count differs from the model, the model MUST be updated.
    Do NOT report 'no changes' unless you have verified every component by name.
-6. Update the LikeC4 model to reflect the RIG. Every element MUST correspond to a real entry in the RIG.
-   Follow the RIG → C4 mapping:
+6. Update the LikeC4 model to reflect the RIG. Every element MUST correspond to a
+   real entry in the RIG. Follow the RIG → C4 mapping:
    a. Context view: one softwareSystem + external_packages as externalSystem nodes.
       Group related packages (e.g., all docker/* → 'Docker Engine').
    b. Container view: executables → containers. Group libraries by function
       (api/, state/, tf/ patterns). Draw depends_on_ids between containers.
    c. Component views (one per container): each RIG component → component node.
-      Write SYNTHESIZED descriptions using the component's name, source paths,
-      and dependency pattern — NOT verbatim RIG quotes.
-      Example: 'machine — REST handlers for machine CRUD; depends on state store'
-      Include the RIG comp-N ID as a comment.
-      Model external_packages_ids as edges to external systems.
-      Annotate evidence (file:line refs from evidence_ids) and test coverage
-      (from test_definitions covers_ids) in descriptions where relevant.
+      Write SYNTHESIZED descriptions using the component's name, source paths, and
+      dependency pattern — NOT verbatim RIG quotes.
+      Include the RIG comp-N ID as a comment. Model external_packages_ids as edges
+      to external systems. Annotate evidence (file:line refs) and test coverage.
    d. Generate views: context, containers, one component view per major container.
-      Mention aggregators (meta-targets like go-build-all) in system description.
 7. Run: likec4 format raw/arch/$PROJECT/
 8. Run: likec4 gen mermaid -o /tmp/mermaid raw/arch/$PROJECT/
 9. Update wiki pages that embed architecture diagrams for $PROJECT.
    CRITICAL: Read the existing wiki page FIRST (cat wiki/entities/$PROJECT.md).
-   Preserve ALL manually-written sections — only replace the architecture
-   diagram section (the one containing Mermaid blocks generated from LikeC4).
-   If a human added deployment notes, configuration examples, or manual
-   architecture insights, KEEP them. Only the '## Architecture (C4D2 — RIG +
-   LikeC4)' section and embedded Mermaid blocks should be replaced.
-   If the page has no architecture section yet, insert one after the
-   frontmatter and first introductory paragraph.
+   Preserve ALL manually-written sections — only replace the architecture diagram
+   section (Mermaid blocks generated from LikeC4). Keep human-added deployment
+   notes, configuration examples, manual insights. Only the
+   '## Architecture (C4D2 — RIG + LikeC4)' section + embedded Mermaid change.
 10. Update index.md and append to log.md with operation 'arch-sync'.
     Include the actual component count in the log entry.
-11. Commit: git add -A && git commit -m 'docs(arch-sync): $PROJECT'
-12. Push: git push origin main
+11. COMMIT your work:
+        git add -A && git commit -m 'docs(arch-sync): $PROJECT'
+    Do NOT push — a local validation gate runs next; the push happens only once
+    the gate is green. If the gate fails, you will be told the exact lint errors
+    in THIS session: fix them, commit again, and the gate re-runs.
 
-Do NOT write architecture from memory. Every component, dependency, and boundary MUST come from the RIG.
-Do NOT skip steps. Read the RIG, compare carefully, update the model."
+Do NOT write architecture from memory. Every component, dependency, and boundary
+MUST come from the RIG. Do NOT skip steps. Read the RIG, compare, update.
+PROMPT
 
 elif [ "$WORKFLOW" = "generic" ]; then
-    PROMPT="You are working in the wiki repository at $WIKI_DIR.
+    cat > "/tmp/agent-sync-${PROJECT}-task.txt" <<PROMPT
+You are working in the wiki repository at $WIKI_DIR.
 
-New raw source material for '$PROJECT' has been placed at raw/$PROJECT/ by the controller.
+New raw source material for '$PROJECT' has been placed at raw/$PROJECT/ by the
+controller.
 
 Your task: keep the documentation current by processing the new sources.
 
@@ -126,144 +127,69 @@ Your task: keep the documentation current by processing the new sources.
 5. Create new wiki pages for uncovered topics (correct entity-type directory).
 6. Update existing pages with new or changed information.
 7. Add Mermaid diagrams where they help (sequence, flowchart, etc.).
-8. Maintain cross-references: use [Markdown links](../type/page-name.md) from related pages.
+8. Maintain cross-references: use [Markdown links](../type/page-name.md).
 9. Update index.md and append to log.md with operation 'update'.
-10. Commit: git add -A && git commit -m 'docs(update): $PROJECT'
-11. Push: git push origin main
+10. COMMIT your work:
+        git add -A && git commit -m 'docs(update): $PROJECT'
+    Do NOT push — a local validation gate runs next; the push happens only once
+    the gate is green. If the gate fails, you will be told the exact lint errors
+    in THIS session: fix them, commit again, and the gate re-runs.
 
 Follow the wiki page format strictly (frontmatter, entity types, See Also).
 Use [Markdown links](relative/path.md) for cross-references — NOT [[wikilinks]].
-Links must be relative paths from the current file, e.g. [name](../entities/name.md).
-Never modify files in raw/."
+Links must be relative paths from the current file. Never modify files in raw/.
+PROMPT
 
 else
     log "ERROR: unknown workflow '$WORKFLOW'"
     exit 1
 fi
 
-cd "$WIKI_DIR"
-
-# --- Phase 1: Run the agent (initial documentation update) ---
-log "starting agent sync…"
-timeout 1800 pi --print \
+# ── harmostes: agent task → gate-lint.sh → feedback-as-session-continuation ──
+# harmostes drives ONE warm pi RPC session. The agent does the sync + commits;
+# harmostes runs gate-lint.sh (submodule init + consistency + full lint); on
+# failure it feeds the lint stderr back to the SAME session up to MAX_FIXES.
+# Exit 0 = gate green; 1 = failed after N fixes; 2 = pi/gate error.
+log "starting harmostes-orchestrated agent sync…"
+set +e
+"$HARMOSTES" task \
     --skill /skills/wiki/SKILL.md \
     --model "$MODEL" \
-    --approve \
-    --no-skills \
-    "$PROMPT" 2>&1 || {
-    log "ERROR: agent sync failed (exit $?)"
-    exit 1
-}
+    --tools read,bash,edit,grep \
+    --workdir "$WIKI_DIR" \
+    --task-file "/tmp/agent-sync-${PROJECT}-task.txt" \
+    --gate "bash /usr/local/bin/gate-lint.sh '$WIKI_DIR'" \
+    --max-fixes "$MAX_FIXES" \
+    --log "/tmp/agent-sync-${PROJECT}-events.jsonl" \
+    --timeout "$TIMEOUT"
+HARMOSTES_RC=$?
+set -e
 
-log "agent sync complete for $PROJECT ($WORKFLOW)"
+# ── Green gate → push + record state ─────────────────────────────────────────
+cd "$WIKI_DIR"
 
-# Save agent run result to Dapr state
+if [ "$HARMOSTES_RC" -ne 0 ]; then
+    log "agent step did not reach a green gate (harmostes exit $HARMOSTES_RC) — NOT pushing"
+    if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
+        curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
+            -H "Content-Type: application/json" \
+            -d "[{\"key\":\"$PROJECT:agent_status\",\"value\":\"gate-failed\"},{\"key\":\"$PROJECT:ci_status\",\"value\":\"failed\"}]" \
+            >/dev/null 2>&1 || true
+    fi
+    exit 0   # non-fatal — reconcile.sh continues to the next WikiMap
+fi
+
+log "gate GREEN — pushing $PROJECT"
+git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed"
+
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
 if curl -sf http://localhost:3500/v1.0/healthz >/dev/null 2>&1; then
-    COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
     curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
         -H "Content-Type: application/json" \
-        -d "[{\"key\": \"$PROJECT:agent_commit\", \"value\": \"$COMMIT_SHA\"}, {\"key\": \"$PROJECT:agent_status\", \"value\": \"synced\"}]" \
+        -d "[{\"key\":\"$PROJECT:agent_commit\",\"value\":\"$COMMIT_SHA\"},{\"key\":\"$PROJECT:agent_status\",\"value\":\"synced\"},{\"key\":\"$PROJECT:ci_status\",\"value\":\"green\"}]" \
         >/dev/null 2>&1 || true
-    log "state saved to Dapr (commit=$COMMIT_SHA)"
+    log "state saved (commit=$COMMIT_SHA, ci=green)"
 fi
 
-# --- Phase 2: CI self-healing loop ---
-#
-# After the agent pushes, monitor the CI run it triggered. If CI fails,
-# re-invoke the agent with instructions to run the lint pipeline locally,
-# fix the errors, and push again. Repeat up to MAX_CI_RETRIES times.
-
-if [ -z "$WIKI_REPO" ]; then
-    log "no wiki repo URL — skipping CI monitoring"
-    exit 0
-fi
-
-if [ ! -f /usr/local/bin/ci-monitor.sh ]; then
-    log "ci-monitor.sh not found — skipping CI monitoring"
-    exit 0
-fi
-
-COMMIT_SHA=$(git rev-parse HEAD)
-log "post-push CI monitoring for ${COMMIT_SHA:0:12}…"
-
-for attempt in $(seq 1 "$MAX_CI_RETRIES"); do
-    log "CI monitoring attempt $attempt/$MAX_CI_RETRIES…"
-
-    CI_STATUS=$(timeout $((CI_POLL_WAIT + 30)) \
-        bash /usr/local/bin/ci-monitor.sh "$WIKI_REPO" "$COMMIT_SHA" "$CI_POLL_WAIT" 2>/dev/null \
-        || echo "skip")
-
-    case "$CI_STATUS" in
-        success)
-            log "CI green ✓ — pipeline complete"
-            # Save CI status to Dapr
-            curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
-                -H "Content-Type: application/json" \
-                -d "[{\"key\": \"$PROJECT:ci_status\", \"value\": \"green\"}]" \
-                >/dev/null 2>&1 || true
-            exit 0
-            ;;
-        skip)
-            log "CI monitoring not available for this platform — skipping"
-            exit 0
-            ;;
-        timeout)
-            log "CI polling timed out — assuming OK (non-blocking)"
-            exit 0
-            ;;
-        failed)
-            log "CI FAILED (attempt $attempt) — invoking agent to fix…"
-
-            # Record failure in Dapr
-            curl -sf -X POST "http://localhost:3500/v1.0/state/${DAPR_STATE_STORE:-statestore}" \
-                -H "Content-Type: application/json" \
-                -d "[{\"key\": \"$PROJECT:ci_status\", \"value\": \"failed\"}, {\"key\": \"$PROJECT:ci_attempt\", \"value\": \"$attempt\"}]" \
-                >/dev/null 2>&1 || true
-
-            FIX_PROMPT="You are working in the wiki repository at $WIKI_DIR.
-
-Your previous commit (${COMMIT_SHA:0:12}) FAILED CI. The wiki CI pipeline runs:
-  1. Consistency check (generated files vs config + submodule sync)
-  2. markdownlint, mdlint-obsidian, remark frontmatter schema
-  3. Mermaid render check, LikeC4 format check
-  4. Unique filenames, raw/ immutability, wiki health
-
-The consistency check gates all other steps — if it fails, lint is skipped.
-Fix the ROOT CAUSE, not just symptoms:
-
-1. Run the consistency check first: bash .llm-wiki/scripts/ci-consistency.sh
-   If it reports DRIFT, run: bash .llm-wiki/scripts/bootstrap.sh
-   This regenerates files from the submodule (AGENTS.md, .markdownlint.yaml, etc.)
-2. Run the lint pipeline: bash .llm-wiki/scripts/ci-lint.sh
-3. Read the error output carefully.
-4. Fix every error in the relevant files.
-5. Re-run BOTH checks to confirm:
-   bash .llm-wiki/scripts/ci-consistency.sh && bash .llm-wiki/scripts/ci-lint.sh
-6. When all errors are fixed, commit and push:
-   git add -A && git commit -m 'fix: resolve CI lint failures' && git push origin main
-
-Do NOT modify files in raw/. Follow the wiki schema in AGENTS.md."
-
-            timeout 1200 pi --print \
-                --skill /skills/wiki/SKILL.md \
-                --model "$MODEL" \
-                --approve \
-                --no-skills \
-                "$FIX_PROMPT" 2>&1 || {
-                log "WARN: agent fix attempt $attempt failed"
-            }
-
-            # Check if the agent actually made changes
-            NEW_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
-            if [ -z "$NEW_SHA" ] || [ "$NEW_SHA" = "$COMMIT_SHA" ]; then
-                log "agent made no changes — stopping CI healing loop"
-                exit 0
-            fi
-            COMMIT_SHA="$NEW_SHA"
-            log "agent pushed fix commit ${COMMIT_SHA:0:12}"
-            ;;
-    esac
-done
-
-log "CI healing loop exhausted ($MAX_CI_RETRIES attempts) — CI may still be red"
+log "agent-sync complete for $PROJECT ($WORKFLOW)"
 exit 0

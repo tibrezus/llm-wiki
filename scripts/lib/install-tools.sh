@@ -5,12 +5,20 @@ set -euo pipefail
 # Source this file: source "$(dirname "$0")/install-tools.sh"
 
 install_node_tools() {
+    if command -v markdownlint-cli2 >/dev/null 2>&1; then
+        echo "::group::Install Node.js tools (markdownlint-cli2 present — skipped)"
+        echo "::endgroup::"; return
+    fi
     echo "::group::Install Node.js tools"
     npm install -g markdownlint-cli2
     echo "::endgroup::"
 }
 
 install_python_tools() {
+    if command -v mdlint >/dev/null 2>&1 && python3 -c "import yaml" >/dev/null 2>&1; then
+        echo "::group::Install Python tools (mdlint + pyyaml present — skipped)"
+        echo "::endgroup::"; return
+    fi
     echo "::group::Install Python tools"
     _TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     _SCRIPTS_DIR="$(dirname "$_TOOLS_DIR")"
@@ -64,12 +72,14 @@ install_qmd() {
 }
 
 install_likec4() {
+    if command -v likec4 >/dev/null 2>&1; then return; fi
     echo "::group::Install LikeC4"
     npm install -g likec4 2>/dev/null || npm install -g likec4
     echo "::endgroup::"
 }
 
 install_mermaid_cli() {
+    if command -v mmdc >/dev/null 2>&1; then return; fi
     echo "::group::Install Mermaid CLI"
     npm install -g @mermaid-js/mermaid-cli 2>/dev/null || npm install -g @mermaid-js/mermaid-cli
     # Ensure Chromium is installed for Puppeteer (mmdc uses it to render)
