@@ -200,17 +200,36 @@ if [ "$HARMOSTES_RC" -ne 0 ]; then
 fi
 
 log "gate GREEN — pushing $PROJECT"
-# Rebase the agent's commits onto the latest origin/DST_BRANCH before pushing:
-# the agent can run for several minutes, during which the wiki's branch may
-# advance (another project's arch-sync, a manual edit). Replay on top to avoid
-# a non-fast-forward rejection. The worktree is detached, so rebase creates a
-# new detached HEAD at the rebased commits — fine for `push HEAD:refs/heads/…`.
+# Replay the agent's commit onto the latest origin/DST_BRANCH. The agent can run
+# for minutes; a concurrent wiki edit (another arch-sync, a manual fix) may have
+# advanced the branch. Rebase; on conflict, resolve safely so the push ALWAYS
+# lands without losing concurrent work:
+#   - log.md / index.md (shared changelog): union — keep origin's lines, append
+#     the agent's NEW lines (concurrent + agent appends both preserved).
+#   - everything else: the agent's version (it owns those project files).
 git fetch origin "$DST_BRANCH" 2>/dev/null || true
 if git rebase "origin/$DST_BRANCH" 2>/dev/null; then
-    git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed (non-fast-forward after rebase?)"
+    git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed (non-fast-forward?)"
 else
-    git rebase --abort 2>/dev/null || true
-    log "WARN: rebase onto origin/$DST_BRANCH conflicted — NOT pushing (concurrent wiki edit touched same files)"
+    log "rebase conflicted — resolving (changelog union, project files = agent)"
+    for f in $(git diff --name-only --diff-filter=U 2>/dev/null); do
+        case "$f" in
+            log.md|index.md)
+                git show ":2:$f" > /tmp/as-orig.$$ 2>/dev/null || true   # origin side
+                git show ":3:$f" > /tmp/as-agent.$$ 2>/dev/null || true  # agent side
+                awk 'NR==FNR{seen[$0]=1; print; next} !seen[$0]' \
+                    /tmp/as-orig.$$ /tmp/as-agent.$$ > "$f" 2>/dev/null || git checkout --theirs -- "$f"
+                rm -f /tmp/as-orig.$$ /tmp/as-agent.$$
+                ;;
+            *)
+                git checkout --theirs -- "$f" 2>/dev/null || true   # agent's version
+                ;;
+        esac
+        git add -- "$f" 2>/dev/null || true
+    done
+    GIT_EDITOR=true git rebase --continue 2>/dev/null \
+        && git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 \
+        || { git rebase --abort 2>/dev/null || true; log "WARN: could not resolve cleanly — NOT pushing"; }
 fi
 
 COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
