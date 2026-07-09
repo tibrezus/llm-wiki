@@ -208,7 +208,11 @@ log "gate GREEN — pushing $PROJECT"
 #     the agent's NEW lines (concurrent + agent appends both preserved).
 #   - everything else: the agent's version (it owns those project files).
 git fetch origin "$DST_BRANCH" 2>/dev/null || true
-if git rebase "origin/$DST_BRANCH" 2>/dev/null; then
+# Rebase onto FETCH_HEAD (the just-fetched tip), NOT origin/$DST_BRANCH: the
+# controller's bare-clone worktree updates refs/heads/$DST_BRANCH but leaves the
+# remote-tracking ref stale, so rebasing onto it spuriously replays onto an older
+# base. FETCH_HEAD is always fresh.
+if git rebase FETCH_HEAD 2>/dev/null; then
     git push origin "HEAD:refs/heads/$DST_BRANCH" 2>&1 || log "WARN: push failed (non-fast-forward?)"
 else
     log "rebase conflicted — resolving (changelog union, project files = agent)"
