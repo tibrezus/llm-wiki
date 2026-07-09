@@ -30,9 +30,19 @@ WIKI_DIR="${1:?Usage: gate-lint.sh <wiki-dir>}"
 
 cd "$WIKI_DIR"
 
-echo "=== gate: init submodule ==="
-git submodule update --init --recursive >/dev/null 2>&1 || {
-    echo "ERROR: could not init .llm-wiki submodule (network? detached worktree?)" >&2
+# Defend against git 'dubious ownership' when the worktree's git dir is owned by a
+# different uid (bare-clone worktree on the PVC, or a volume mount). Harmless when
+# not needed. The controller pod owns its worktree; this is belt-and-suspenders.
+git config --global --add safe.directory '*' 2>/dev/null || true
+
+echo "=== gate: ensure .llm-wiki present ==="
+# Only pay the init cost if the lint scripts aren't already there (the controller's
+# fresh worktree won't have them; a re-run / mounted tree might).
+if [ ! -f .llm-wiki/scripts/ci-lint.sh ]; then
+    git submodule update --init --recursive 2>&1 | tail -3
+fi
+[ -f .llm-wiki/scripts/ci-lint.sh ] || {
+    echo "ERROR: .llm-wiki not available (ci-lint.sh missing) — cannot validate" >&2
     exit 2
 }
 
