@@ -43,6 +43,18 @@ else
 fi
 
 command -v pi >/dev/null 2>&1 || { log "ERROR: pi not found on PATH"; exit 1; }
+
+# Configure git's built-in 'union' merge driver for the shared changelog files.
+# The agent can run for minutes; if another wiki edit (a concurrent arch-sync, a
+# manual fix) appends to log.md/index.md during that window, a straight rebase
+# would conflict on those files. union takes BOTH sides' lines → clean rebases.
+# Written to the per-repo attributes (git-path info/attributes), so it never
+# pollutes the working tree or gets committed.
+cd "$WIKI_DIR"
+ATTRS="$(git rev-parse --git-path info/attributes 2>/dev/null)" || ATTRS=""
+if [ -n "$ATTRS" ]; then
+    printf 'log.md merge=union\nindex.md merge=union\n' >> "$ATTRS"
+fi
 # Resolve the harmostes binary into an ARRAY so a "python3 /path/harmostes.py"
 # value word-splits correctly. (A quoted scalar would be treated as one command
 # name including the space → exit 127.) Honors $HARMOSTES, else 'harmostes' on
