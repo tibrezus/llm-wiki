@@ -183,6 +183,10 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
     entrypoints: list[str] = []
     name_to_id: dict[str, str] = {}
     var_to_name: dict[str, str] = {}
+    # Executable name → component id, kept SEPARATE from name_to_id so a module
+    # sharing an executable's name (e.g. addModule("rhesadox") alongside
+    # addExecutable(.{.name="rhesadox"})) cannot shadow it during edge resolution.
+    exe_id_by_name: dict[str, str] = {}
 
     # ── Phase 1: Build variable → source_file map ──
     # Track ALL createModule/addModule calls so we can resolve .root_module refs
@@ -222,6 +226,7 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
             continue
         cid = next_id()
         name_to_id[name] = cid
+        exe_id_by_name[name] = cid
         # Extract the struct body (up to the first });) to avoid
         # matching fields from the NEXT addExecutable/createModule call
         raw = build_zig[m.end():m.end() + 500]
@@ -322,7 +327,12 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
         mod_var = m.group(2)
         exe_name = var_to_name.get(exe_var)
         if exe_name:
-            cid = resolve_id(exe_name)
+            # Resolve to the EXECUTABLE component, never a same-named module.
+            # resolve_id() is module-first; using it here mapped exe_mod → the
+            # "rhesadox" module (comp-6) instead of the executable (comp-1),
+            # turning exe_mod.addImport("rhesadox", engine_mod) into a self-loop
+            # (comp-6→comp-6) that was dropped — losing the exe→lib edge.
+            cid = exe_id_by_name.get(exe_name) or name_to_id.get(exe_name)
             if cid:
                 mod_var_to_comp_id[mod_var] = cid
 
@@ -349,6 +359,35 @@ def extract_zig() -> tuple[list[dict], list[dict], list[str], list[dict]]:
                     if c["id"] == cid and pid not in c["depends_on_ids"]:
                         c["depends_on_ids"].append(pid)
                         break
+
+    # ── Phase 4b: Source-level module @import cross-check ──────────────────
+    # Zig source expresses inter-module deps as @import("module-name") — a BARE
+    # name, not a .zig path. build.zig addImport (Phase 4) is the authority but
+    # regex-fragile; scanning each component's source for @import("<module>")
+    # recovers edges the build regex missed (e.g. the name-collision self-loop
+    # above) and makes the dependency code-level/evidence-backed. This is the
+    # finer @import granularity: build-level linking (Phase 4) ∪ source-level
+    # module imports (here), reconciled onto the build-target component graph.
+    module_name_to_id: dict[str, str] = {
+        mk[len("__module__"):]: mv
+        for mk, mv in name_to_id.items() if mk.startswith("__module__")
+    }
+    if module_name_to_id:
+        for c in components:
+            if c.get("programming_language") != "zig":
+                continue
+            for sf in c.get("source_files", []):
+                try:
+                    txt = Path(sf).read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+                for im in re.finditer(r'@import\s*\(\s*"([^"]+)"\s*\)', txt):
+                    target = im.group(1)
+                    if target.endswith(".zig"):
+                        continue  # file import (intra-component closure)
+                    pid = module_name_to_id.get(target)
+                    if pid and pid != c["id"] and pid not in c["depends_on_ids"]:
+                        c["depends_on_ids"].append(pid)
 
     # ── Phase 5: External packages from build.zig.zon ──
     external_packages = []
