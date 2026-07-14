@@ -78,4 +78,18 @@ properties:
               description: Name of the CI secret holding a read token for the project repo (private projects only). The named env var is injected by the runner from the repo/org secret.
           additionalProperties: false
     additionalProperties: false
+  pages:
+    type: object
+    description: Per-page content rules enforced by wiki CI.
+    properties:
+      size_limit:
+        type: integer
+        default: 400
+        minimum: 1
+        description: Max lines per wiki/ page. Over-limit pages emit a CI annotation nudging shrink/split.
+      size_strict:
+        type: boolean
+        default: false
+        description: When true, over-limit pages fail CI instead of warning.
+    additionalProperties: false
 additionalProperties: false

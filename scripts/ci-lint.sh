@@ -144,6 +144,13 @@ echo "--- wiki health check ---"
 python3 .llm-wiki/scripts/wiki-health.py wiki/
 
 echo ""
+echo "--- page size ---"
+# Each wiki/ page should be absorbable in a single glance. Over-limit pages
+# emit an annotation nudging shrink/split; fails CI only when
+# pages.size_strict is true (default: warn).
+python3 "$SCRIPT_DIR/validate-page-size.py" wiki/ "$CONFIG_FILE"
+
+echo ""
 echo "--- RIG compliance audit (paper: arXiv:2601.10112) ---"
 # Audit every committed RIG against the paper's standard.
 # ERROR-level checks (correctness) are gating — they indicate structural
