@@ -19,14 +19,15 @@ runs:
         LANGUAGE: ${{ inputs.language }}
         OUTPUT: ${{ inputs.output }}
       run: |
-        # Dispatch to the language-specific emitter.
-        # GITHUB_ACTION_PATH is the canonical path to a composite action's dir;
-        # dirname $0 is the shell binary, not the action, so it is unreliable here.
-        EMITTER="${GITHUB_ACTION_PATH}/emit-${LANGUAGE}.sh"
+        # Universal emitter (emit-rig.sh → emit-rig.py). Auto-detects every build
+        # system in the repo; the language input is a hint, not a dispatch key.
+        # This is the SAME emitter the in-cluster harmostes / llm-wiki controller
+        # uses, so the project-CI RIG and the wiki RIG stay consistent and share
+        # every emitter fix — no per-language drift.
+        EMITTER="${GITHUB_ACTION_PATH}/emit-rig.sh"
         if [ ! -f "$EMITTER" ]; then
-          echo "::error::No RIG emitter for language '${LANGUAGE}'. Supported: go, typescript, python, rust, zig."
-          echo "Request support at https://github.com/tibrezus/llm-wiki/issues"
+          echo "::error::Universal RIG emitter (emit-rig.sh) not found in the action."
           exit 1
         fi
-        bash "$EMITTER" "$OUTPUT"
+        bash "$EMITTER" "$OUTPUT" "$LANGUAGE"
         echo "Generated RIG: $OUTPUT ($(wc -c < "$OUTPUT") bytes)"
