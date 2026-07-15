@@ -121,16 +121,26 @@ generate_ci_workflow() {
     #   github  -> actions/checkout@v4 (resolves from github.com)
     #   forgejo -> https://code.forgejo.org/actions/checkout@v4
     #   gitea   -> https://gitea.com/actions/checkout@v4
-    local checkout_action
+    #
+    # setup-node: GitHub runners need actions/setup-node to put npm on PATH.
+    # Forgejo/Gitea self-hosted runners have Node pre-installed but the
+    # setup-node action fails in their environment, so we skip it there.
+    local checkout_action setup_node_block
     case "$platform" in
         forgejo)
             checkout_action="https://code.forgejo.org/actions/checkout@v4"
+            setup_node_block=''
             ;;
         gitea)
             checkout_action="https://gitea.com/actions/checkout@v4"
+            setup_node_block=''
             ;;
         *)
             checkout_action="actions/checkout@v4"
+            setup_node_block="      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: \"${node_version}\""
             ;;
     esac
 
@@ -152,7 +162,7 @@ jobs:
         uses: ${checkout_action}
         with:
           submodules: true
-
+${setup_node_block}
       - name: Install python deps (pyyaml)
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
 
@@ -174,7 +184,7 @@ jobs:
         uses: ${checkout_action}
         with:
           submodules: true
-
+${setup_node_block}
       - name: Install python deps (pyyaml)
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
 
