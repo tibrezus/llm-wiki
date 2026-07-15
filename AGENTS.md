@@ -16,7 +16,7 @@ three layers:
 2. **GitOps controller** — Helm chart + scripts + Dockerfile. Installed in
    Kubernetes via k8s-config to automatically generate RIGs and run the LLM
    agent pipeline.
-3. **Agent skill** — `skill/SKILL.md`, synced to `~/.agents/skills/wiki/`.
+3. **Agent skill** — `.agents/skills/wiki/SKILL.md` (git submodule of `tibrezus/agents`), synced to `~/.agents/skills/wiki/`.
    Guides the LLM when operating on wiki content.
 
 ## Three Documents — Do Not Confuse Them
@@ -25,7 +25,7 @@ three layers:
 |------|------|
 | **This file** (`AGENTS.md`) | How to maintain the **module** (scripts, schemas, CI, chart, emitters) |
 | `instance/AGENTS.md` | The **wiki schema** — page format, frontmatter, entity types, two documentation workflows. Copied verbatim into each instance's root `AGENTS.md` by `bootstrap.sh`. |
-| `skill/SKILL.md` | The **agent skill** — commands for the pi.dev harness (`read`, `update`, `create`, `prune`, `list`, `arch-sync`, `consult`). Synced to `~/.agents/skills/wiki/SKILL.md`. |
+| `.agents/skills/wiki/SKILL.md` | The **agent skill** — commands for the pi.dev harness (`read`, `update`, `create`, `prune`, `list`, `arch-sync`, `consult`). Source of truth: `tibrezus/agents` repo (git submodule at `.agents/`). Synced to `~/.agents/skills/wiki/SKILL.md`. |
 
 ## Module ↔ Instance Relationship
 
@@ -55,7 +55,7 @@ job inlines checkout + install + script calls. The `ci.platform` field in
 ```text
 AGENTS.md                           # THIS FILE
 instance/AGENTS.md                  # Wiki schema (copied into instances)
-skill/SKILL.md                      # Agent skill (synced to ~/.agents/skills/wiki/)
+.agents/skills/wiki/SKILL.md         # Agent skill (submodule of tibrezus/agents; synced to ~/.agents/skills/wiki/)
 schemas/
   wiki-page.schema.yaml             # Page frontmatter schema
   wiki-config.schema.yaml           # wiki.config.yml schema
@@ -290,8 +290,7 @@ npm run check    # markdownlint + remark + pytest
   Never hand-edit generated file contents.
 - **`ci-consistency.sh` must know about every copied/generated file.** If you
   add a new artifact, update both `generate.sh` and `ci-consistency.sh`.
-- **The skill is part of the module**: always sync `skill/SKILL.md` to
-  `~/.agents/skills/wiki/SKILL.md` after changing it.
+- **The skill source of truth is `tibrezus/agents`** (git submodule at `.agents/`). Always sync: `cp .agents/skills/wiki/SKILL.md ~/.agents/skills/wiki/SKILL.md`.
 - **Backwards compatibility**: a change that breaks existing configs or pages
   will break every instance's CI simultaneously. Coordinate.
 

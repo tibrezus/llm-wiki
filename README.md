@@ -14,7 +14,7 @@ knowledge bases maintained by LLM agents. This repository provides three layers:
 │                                                               │
 │  Wiki Tooling          GitOps Controller        Agent Skill    │
 │  ─────────────         ─────────────────        ───────────    │
-│  instance/AGENTS.md    deploy/chart/            skill/SKILL.md │
+│  instance/AGENTS.md    deploy/chart/            .agents/skills/wiki/SKILL.md │
 │  schemas/              deploy/scripts/                         │
 │  scripts/              Dockerfile                               │
 │  tests/                .github/actions/repo-map/               │
