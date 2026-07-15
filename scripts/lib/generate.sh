@@ -121,19 +121,16 @@ generate_ci_workflow() {
     #   github  -> actions/checkout@v4 (resolves from github.com)
     #   forgejo -> https://code.forgejo.org/actions/checkout@v4
     #   gitea   -> https://gitea.com/actions/checkout@v4
-    local checkout_action setup_node_action
+    local checkout_action
     case "$platform" in
         forgejo)
             checkout_action="https://code.forgejo.org/actions/checkout@v4"
-            setup_node_action="https://code.forgejo.org/actions/setup-node@v4"
             ;;
         gitea)
             checkout_action="https://gitea.com/actions/checkout@v4"
-            setup_node_action="https://gitea.com/actions/setup-node@v4"
             ;;
         *)
             checkout_action="actions/checkout@v4"
-            setup_node_action="actions/setup-node@v4"
             ;;
     esac
 
@@ -156,11 +153,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Setup Node.js
-        uses: ${setup_node_action}
-        with:
-          node-version: "${node_version}"
-
       - name: Install python deps (pyyaml)
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
 
@@ -182,11 +174,6 @@ jobs:
         uses: ${checkout_action}
         with:
           submodules: true
-
-      - name: Setup Node.js
-        uses: ${setup_node_action}
-        with:
-          node-version: "${node_version}"
 
       - name: Install python deps (pyyaml)
         run: bash .llm-wiki/scripts/install-python-deps.sh pyyaml
