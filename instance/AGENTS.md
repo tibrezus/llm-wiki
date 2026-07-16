@@ -510,6 +510,11 @@ Chronological append-only log:
 - **Never leave a page without frontmatter**
 - **Never create a page without `## See Also`**
 - **Never skip updating `index.md`** after page changes
+- **Never scatter docs in the project repo** (`docs/`, ADRs) — move them
+  to the wiki. Root files (`README.md`, `AGENTS.md`, `CONTEXT.md`) are
+  **indexes** that link to the wiki, not documentation themselves.
+- **Never use platform wikis** (GitHub/Forgejo wikis) — the llm-wiki repo
+  is the single documentation home (structured, cross-referenced, CI-validated)
 
 ## Agent-Generated vs Manual Content
 
