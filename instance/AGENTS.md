@@ -55,6 +55,24 @@ configuration, and which architecture projects are declared (if any).
 3. **The schema** (`AGENTS.md` + `wiki.config.yml`) — Tells you how the wiki is
    structured and what workflows to follow.
 
+### How to Understand a Project
+
+When you need to grasp a project — whether for a feature, fix, or review —
+read in this order:
+
+1. **Structure first (if available)** — Check if `raw/arch/<project>/rig.json`
+   exists. If yes, read it. This deterministic code graph shows components,
+   their types, dependencies, and entrypoints. It is the most efficient way to
+   understand *what* exists and *how* it connects (1–15K tokens).
+
+2. **Reasoning second** — Read relevant `wiki/` pages to understand *why*
+   decisions were made, trade-offs, and operational context. The wiki does not
+   duplicate structure; it captures intent.
+
+If no RIG exists, use the wiki directly and route to the minimal source via
+qmd search. The "least-context routing" table in the llm-wiki skill shows
+how to choose the right pages.
+
 ## Entity Types
 
 Pages are organized by **what kind of knowledge** they represent:
