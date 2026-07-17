@@ -69,6 +69,7 @@ COPY deploy/scripts/ci-monitor.sh        /usr/local/bin/ci-monitor.sh
 COPY deploy/scripts/event-subscriber.py  /usr/local/bin/event-subscriber.py
 COPY .github/actions/repo-map/emit-rig.sh /emitters/emit-rig.sh
 COPY .github/actions/repo-map/emit-rig.py /emitters/emit-rig.py
+COPY .github/actions/repo-map/rig/          /emitters/rig/
 COPY schemas/repo-map.schema.yaml        /schema/repo-map.schema.yaml
 COPY scripts/arch/validate-rig.py        /usr/local/bin/validate-rig.py
 
