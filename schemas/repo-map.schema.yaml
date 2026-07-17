@@ -106,6 +106,16 @@ properties:
                 type: string
               relative_path:
                 type: string
+        artifacts:
+          type: array
+          description: Build output artifacts (binary, library file).
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              relative_path:
+                type: string
         evidence_ids:
           type: array
           description: IDs of evidence entries backing this component.
@@ -195,6 +205,12 @@ properties:
           description: Test source files.
           items:
             type: string
+        test_framework:
+          type: string
+          description: Test framework (go test, zig test, pytest, cargo test, etc.).
+        test_executable_component_id:
+          type: string
+          description: ID of the component/runner that produces the test executable.
         evidence_ids:
           type: array
           description: IDs of evidence entries backing this test.
