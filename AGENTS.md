@@ -93,10 +93,23 @@ deploy/                             # GitOps controller
     agent-sync.sh                   # LLM step: pi --print (GLM-5.2 via ZAI)
     add-wikimap.sh                  # One-command project onboarding
 Dockerfile                          # Controller image (Go + Python3 + Node22 + pi + likec4)
-.github/actions/repo-map/           # RIG emitters (also usable as GitHub Action)
+.github/actions/repo-map/           # Universal RIG generator (also usable as GitHub Action)
   action.yml                        # Composite Action dispatch
-  emit-go.sh                        # Go RIG emitter (go list -json)
-  emit-zig.sh                       # Zig RIG emitter (build.zig + build.zig.zon)
+  emit-rig.sh                       # Shell wrapper
+  emit-rig.py                       # Slim entry point: detect → extract → validate → output
+  rig/                              # Modular RIG package (Spade-aligned)
+    model.py                        # Data types: Component, Runner, TestDefinition, Evidence, ...
+    builder.py                      # RIGBuilder: ID assignment, evidence cache, name→ID resolution
+    validator.py                    # Generation-time validation (refs/cycles/evidence=ERROR, completeness=WARN)
+    extractors/                     # One module per build system
+      base.py                       # Extractor ABC: detects() + extract(builder)
+      go.py                         # Go: go list -json
+      zig.py                        # Zig: build.zig static analysis + native C/CUDA tracing
+      cargo.py                      # Rust: Cargo.toml manifest parsing
+      npm.py                        # npm/TypeScript: package.json + workspaces
+      python.py                     # Python: pyproject.toml + package discovery
+      cmake.py                      # CMake: add_executable/add_library + standalone C fallback
+      generic.py                    # Fallback: groups source files by language
 tests/
   test_wiki_health.py
 ```
@@ -266,13 +279,139 @@ docker push ghcr.io/tibrezus/llm-wiki-controller:0.1.0
 
 Contains: Go, Python3, Node.js 22, pi.dev harness, likec4, kubectl, git.
 
-### Adding a new language emitter
+### Adding a new language extractor
 
-1. Create `.github/actions/repo-map/emit-<lang>.sh` (follow `emit-go.sh` pattern)
-2. Add the language to the CRD enum in `deploy/chart/templates/crd-wikimap.yaml`
-3. Add to `emit-<lang>.sh` to the Dockerfile COPY
-4. Add the toolchain to the Dockerfile (e.g., `cargo`, `pip`)
-5. `npm run check`; commit; rebuild image
+The RIG generator is modular: each build system is a self-contained extractor
+in `rig/extractors/`. To add support for a new language/build system:
+
+1. **Create `rig/extractors/<lang>.py`** — a class extending `Extractor`:
+
+   ```python
+   from rig.builder import RIGBuilder
+   from rig.model import Component
+   from rig.extractors.base import Extractor
+
+   class MyLangExtractor(Extractor):
+       name = "my-build-system"
+       build_file = "MyBuild.txt"
+
+       @staticmethod
+       def detects() -> bool:
+           from pathlib import Path
+           return Path("MyBuild.txt").exists()
+
+       def extract(self, builder: RIGBuilder) -> None:
+           # Parse build file, create Components/Tests/Runners,
+           # register them via builder.add_component(...), etc.
+           # Express dependencies as NAMES; builder resolves to IDs.
+           ...
+   ```
+
+2. **Register it** in `emit-rig.py` — add the class to `EXTRACTOR_CLASSES`
+   (before `GenericExtractor`).
+3. **Add the toolchain** to the Dockerfile if the extractor needs a compiler/runtime.
+4. **`npm run check`**; commit; rebuild image.
+
+Key conventions:
+
+- Components express `depends_on` and `external_packages` as **names** (strings).
+  The `RIGBuilder.build()` method resolves names → IDs. Extractors never track
+  ID maps themselves.
+- Evidence should cite **actual build-file line numbers**, not just `:1`. Use
+  `builder.evidence_at(build_file, text, offset)` or `builder.evidence(f"{file}:{line}")`.
+- Emit **runners** for test/build commands (e.g., `zig build test`, `cargo test`).
+- Emit **aggregators** for meta-targets (`go-build-all`, `zig-build`).
+- Populate **component artifacts** (output paths) for executables.
+
+## RIG Pipeline (arXiv:2601.10112 / Spade)
+
+The RIG (Repository Intelligence Graph) is the deterministic contract between
+a project and the wiki. It is a graph of **evidence-backed** build artifacts:
+components are BUILD TARGETS (not source files), evidence proves each node is
+defined by the build system, and test definitions link tests to production code.
+
+### Architecture
+
+```text
+Project Repo                          Wiki Instance
+┌──────────────────────────┐         ┌─────────────────────────────┐
+│ emit-rig.py (entry point) │         │ ci-arch.sh                   │
+│  ├─ detect extractors     │         │  ├─ fetch rig.json            │
+│  ├─ run extractors        │ ──RIG──▶│  ├─ validate-rig.py (schema)  │
+│  │   ├─ go.py             │   JSON  │  ├─ rig-compliance.py (audit) │
+│  │   ├─ zig.py            │         │  └─ commit to raw/arch/       │
+│  │   ├─ cargo.py          │         │                               │
+│  │   └─ ...               │         │ arch-sync (LLM step)          │
+│  ├─ validate              │         │  ├─ read rig.json             │
+│  │   (ERROR: refs/cycles/ │         │  ├─ write model.c4            │
+│  │    evidence/dup-ids)   │         │  ├─ likec4 gen mermaid        │
+│  │   (WARN: completeness) │         │  └─ update wiki pages         │
+│  └─ output JSON           │         └─────────────────────────────┘
+└──────────────────────────┘
+```
+
+### Core layers
+
+| Layer | File | Responsibility |
+|-------|------|---------------|
+| **Model** | `rig/model.py` | Spade data types (dataclasses): `Component`, `Aggregator`, `Runner`, `TestDefinition`, `Evidence`, `ExternalPackage`, `Artifact` |
+| **Builder** | `rig/builder.py` | `RIGBuilder`: ID assignment, evidence cache (dedup), name→ID resolution, auto-evidence, JSON assembly |
+| **Validator** | `rig/validator.py` | Generation-time checks: dangling refs, cycles, duplicate IDs, evidence coverage (all ERROR), completeness (WARN) |
+| **Extractors** | `rig/extractors/*.py` | One class per build system: `detects()` + `extract(builder)`. Express deps as names; builder resolves to IDs |
+
+### Extractor contract
+
+Each extractor:
+
+1. `detects()` — checks if its build system is present (e.g., `go.mod` exists)
+2. `extract(builder)` — parses the build file, registers `Component`s,
+   `TestDefinition`s, `Runner`s, `Aggregator`s, `Evidence`, and
+   `ExternalPackage`s with the builder
+
+Dependencies are expressed as **names** during extraction. The builder
+resolves names → IDs in `build()`, so extractors never track ID maps.
+
+### Spade alignment (paper compliance)
+
+The implementation follows the RIG standard (arXiv:2601.10112,
+github.com/Greenfuze/spade):
+
+| Paper requirement | Implementation |
+|-------------------|---------------|
+| Components are build targets | Each extractor discovers executables/libraries from the build system |
+| Every node has evidence | Builder auto-generates evidence (build-file ref + source-file ref) |
+| Evidence = file:line refs | `Evidence.line` (flat refs) + `Evidence.call_stack` (ordered chain) |
+| No dangling references | Validator: ERROR |
+| No circular dependencies | Validator: ERROR (DFS cycle detection) |
+| No duplicate IDs | Validator: ERROR |
+| Test definitions link to components | `test_framework`, `components_being_tested_ids`, `test_executable_component_id` |
+| Runners execute commands | Emitted per language (`go test`, `zig build test`, `cargo test`, `pytest`, `ctest`) with `arguments` |
+| Aggregators are meta-targets | Emitted per language (`go-build-all`, `zig-build`, `go-test-all`) |
+| External packages have manager metadata | Every package: `package_manager.name` + `package_manager.package_name` |
+| Every source file in a component | Completeness check (WARN — repos with mixed languages may have files outside build targets) |
+
+### Schema (`schemas/repo-map.schema.yaml`)
+
+The schema enforces `additionalProperties: false` on every node type. Fields:
+
+- **components**: `id`, `name`, `type` (executable/shared_library/static_library/package_library/vm/interpreted/unknown), `programming_language`, `source_files`, `depends_on_ids`, `external_packages_ids`, `evidence_ids`, `artifacts` (name + relative_path)
+- **aggregators**: `id`, `name`, `depends_on_ids`, `evidence_ids`
+- **runners**: `id`, `name`, `arguments`, `depends_on_ids`, `evidence_ids`
+- **test_definitions**: `id`, `name`, `covers_ids`, `depends_on_ids`, `components_being_tested_ids`, `test_framework`, `test_executable_component_id`, `source_files`, `evidence_ids`
+- **evidence**: `id`, `line` (file:line refs), `call_stack` (ordered chain, leaf first)
+- **external_packages**: `id`, `name`, `package_manager` (name + package_name)
+- **entrypoints**: component IDs (executables)
+
+### Vendoring
+
+The same `emit-rig.py` + `rig/` package is used in three places:
+
+1. **GitHub Action** (`.github/actions/repo-map/`) — project CI publishes RIG as a release asset
+2. **harmostes** (`plugins/rig-emit/`) — in-cluster controller generates RIG deterministically
+3. **llm-wiki controller** (`deploy/`) — legacy GitOps controller
+
+Changes to the module must be synced to the harmostes vendor copy:
+`cp -r .github/actions/repo-map/{emit-rig.py,emit-rig.sh,rig} <harmostes>/plugins/rig-emit/`
 
 ## Working in This Module
 

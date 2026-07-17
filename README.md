@@ -152,10 +152,22 @@ spec:
 │
 ├── Dockerfile                      # Controller image (Go + Python3 + Node22 + pi + likec4)
 │
-├── .github/actions/repo-map/       # RIG emitters (also used as standalone GitHub Action)
+├── .github/actions/repo-map/       # Universal RIG generator (also used as standalone GitHub Action)
 │   ├── action.yml                  # Composite Action dispatch
-│   ├── emit-go.sh                  # Go RIG emitter (go list -json)
-│   └── emit-zig.sh                 # Zig RIG emitter (build.zig + build.zig.zon parsing)
+│   ├── emit-rig.sh                 # Shell wrapper
+│   ├── emit-rig.py                 # Slim entry point: detect → extract → validate → output
+│   └── rig/                        # Modular RIG package (Spade-aligned)
+│       ├── model.py                # Data types: Component, Runner, TestDefinition, Evidence
+│       ├── builder.py              # RIGBuilder: IDs, evidence cache, name→ID resolution
+│       ├── validator.py            # Generation-time validation
+│       └── extractors/             # One module per build system
+│           ├── go.py               # Go (go list -json)
+│           ├── zig.py              # Zig (build.zig + native C/CUDA)
+│           ├── cargo.py            # Rust (Cargo.toml)
+│           ├── npm.py              # npm/TypeScript (package.json)
+│           ├── python.py           # Python (pyproject.toml)
+│           ├── cmake.py            # CMake + standalone C/C++/CUDA
+│           └── generic.py          # Fallback (language-grouped scan)
 │
 ├── tests/
 │   └── test_wiki_health.py         # Unit tests for wiki-health.py

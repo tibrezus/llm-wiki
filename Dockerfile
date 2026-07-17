@@ -21,13 +21,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Go (for emit-go.sh)
+# Go (for emit-rig.py Go extractor: go list -json)
 COPY --from=go-base /usr/local/go /usr/local/go
 ENV GOPATH="/go"
 ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
 RUN mkdir -p "${GOPATH}"
 
-# Zig (for emit-zig.sh)
+# Zig (for emit-rig.py Zig extractor: build.zig + .zig sources)
 ARG ZIG_VERSION=0.14.1
 RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
         -o /tmp/zig.tar.xz \
