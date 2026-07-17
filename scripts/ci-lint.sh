@@ -71,6 +71,8 @@ echo ""
 echo "--- likec4 model validation ---"
 # Validate LikeC4 (.c4) model files. Each project lives in its own
 # directory under raw/arch/<project>/, so we run likec4 per-project.
+# We use 'likec4 validate' (not 'format --check') because validate exits
+# non-zero on syntax/semantic errors, while format --check always exits 0.
 C4_COUNT=0
 LIKEC4_FAILED=0
 while IFS= read -r c4file; do
@@ -78,7 +80,7 @@ while IFS= read -r c4file; do
     C4_COUNT=$((C4_COUNT + 1))
     c4dir=$(dirname "$c4file")
     echo "  checking $c4file"
-    if ! likec4 format --check "$c4dir" 2>&1; then
+    if ! likec4 validate "$c4dir" 2>&1; then
         echo "::error::LikeC4 model validation failed for $c4file"
         LIKEC4_FAILED=1
     fi
