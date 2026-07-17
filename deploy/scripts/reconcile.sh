@@ -311,18 +311,10 @@ print(sum(len(c.get('depends_on_ids',[])) for c in rig['components']))
     [ -n "${EDGE_COUNT:-}" ] && dapr_save "$NAME:edge_count" "$EDGE_COUNT"
     dapr_save "$NAME:last_run_at" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-    # Run the LLM agent step if content changed OR status was reset
-    FORCE_SYNC=false
-    [ -z "$LAST_REV" ] && FORCE_SYNC=true
-    if { $CHANGED || $FORCE_SYNC; } && [ -f /usr/local/bin/agent-sync.sh ]; then
-        if $FORCE_SYNC && ! $CHANGED; then
-            log "  running agent sync ($WORKFLOW) [forced — status was reset]…"
-        else
-            log "  running agent sync ($WORKFLOW)…"
-        fi
-        /usr/local/bin/agent-sync.sh "$WIKI_DIR" "$NAME" "$WORKFLOW" "$DST_BRANCH" </dev/null || {
-            log "  WARN: agent sync failed (non-fatal)"
-        }
+    # LLM agent step DISABLED — model.c4 is now generated deterministically
+    # by rig-to-c4.py (integrated into the rig-emit plugin on harmostes).
+    # The bespoke controller is paused and slated for retirement.
+    # agent-sync.sh is intentionally not called.
 
         # Publish event: docs updated
         dapr_publish "wiki.docs.updated" \
