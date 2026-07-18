@@ -70,8 +70,8 @@ scripts/                            # Wiki instance tooling
   validate-mermaid.py              # Render-check mermaid blocks (mmdc)
   wiki-health.py                   # Orphans, bidirectional links, type/dir
   arch/
-    ci-arch.sh                      # Legacy RIG fetch (pre-GitOps)
-    validate-rig.py                 # Validate RIG against schema
+    rig-to-c4.py                 # Deterministic RIG → LikeC4 model generator
+    validate-rig.py             # Validate RIG against schema
   lib/
     config.sh                       # read_config(), require_config()
     generate.sh                     # File generators (CI, package.json, etc.)
@@ -333,21 +333,30 @@ defined by the build system, and test definitions link tests to production code.
 ### Architecture
 
 ```text
-Project Repo                          Wiki Instance
-┌──────────────────────────┐         ┌─────────────────────────────┐
-│ emit-rig.py (entry point) │         │ ci-arch.sh                   │
-│  ├─ detect extractors     │         │  ├─ fetch rig.json            │
-│  ├─ run extractors        │ ──RIG──▶│  ├─ validate-rig.py (schema)  │
-│  │   ├─ go.py             │   JSON  │  ├─ rig-compliance.py (audit) │
-│  │   ├─ zig.py            │         │  └─ commit to raw/arch/       │
-│  │   ├─ cargo.py          │         │                               │
-│  │   └─ ...               │         │ arch-sync (LLM step)          │
-│  ├─ validate              │         │  ├─ read rig.json             │
-│  │   (ERROR: refs/cycles/ │         │  ├─ write model.c4            │
-│  │    evidence/dup-ids)   │         │  ├─ likec4 gen mermaid        │
-│  │   (WARN: completeness) │         │  └─ update wiki pages         │
-│  └─ output JSON           │         └─────────────────────────────┘
-└──────────────────────────┘
+harmostes (k8s) — the documentation engine
+┌───────────────────────────────────────────────────────────────────┐
+│ rig-emit plugin (deterministic)                                   │
+│  ├─ clone project source repo                                     │
+│  ├─ emit-rig.py    → rig.json                                     │
+│  ├─ rig-to-c4.py   → model.c4                                     │
+│  └─ likec4 gen mermaid → *.mmd                                    │
+│                                                                   │
+│ agent (probabilistic — LLM via LiteLLM)                           │
+│  ├─ read rig.json (what changed)                                  │
+│  ├─ embed *.mmd into wiki pages                                   │
+│  ├─ write C4-level prose (context/container/component)            │
+│  ├─ offload code-level details to platform wiki (gh/git)          │
+│  └─ gate: wiki-lint                                               │
+│                                                                   │
+│ git-push plugin → push to wiki repo                               │
+└───────────────────────────────────────────────────────────────────┘
+
+Wiki Instance (CI = lint only)
+┌───────────────────────────────────────────────────────────────────┐
+│ ci-lint.sh   → markdownlint + remark + mermaid + likec4 + health   │
+│ ci-index.sh  → QMD index build + search test                      │
+│ NO arch job, NO RIG fetching, NO generation logic                 │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Core layers
