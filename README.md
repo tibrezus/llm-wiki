@@ -126,7 +126,7 @@ spec:
 │   ├── validate-mermaid.py         # Render-check mermaid blocks with mmdc
 │   ├── wiki-health.py              # Orphans, bidirectional links, type/dir
 │   ├── arch/
-│   │   ├── ci-arch.sh              # Fetch + validate RIG (legacy CI mode)
+│   │   ├── rig-to-c4.py             # Deterministic RIG → LikeC4 model generator
 │   │   └── validate-rig.py         # Validate RIG against schema
 │   └── lib/
 │       ├── config.sh               # read_config(), require_config()
