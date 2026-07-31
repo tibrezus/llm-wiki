@@ -106,7 +106,14 @@ log "  Mermaid: $MMD_COUNT diagram(s)"
 log "Step 4/4: Building wiki pages…"
 python3 "$TOOLS_DIR/build-wiki-pages.py" "$MMD_DIR" \
     --output-dir "$OUTPUT_DIR/wiki" \
-    --project-name "$PROJECT_NAME"
+    --project-name "$PROJECT_NAME" \
+    --rig-file "$RIG_FILE"
+
+# Copy raw artifacts to the wiki output so they're accessible alongside
+# the rendered pages (the wiki is self-contained).
+mkdir -p "$OUTPUT_DIR/wiki/raw"
+cp "$RIG_FILE" "$OUTPUT_DIR/wiki/raw/rig.json" 2>/dev/null || true
+cp "$MODEL_FILE" "$OUTPUT_DIR/wiki/raw/model.c4" 2>/dev/null || true
 
 log "Done. Output: $OUTPUT_DIR"
 log "  Wiki pages: $OUTPUT_DIR/wiki/"
