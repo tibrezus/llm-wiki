@@ -135,6 +135,7 @@ def build_pages(
     output_dir: Path,
     project_name: str,
     rig_path: Path | None = None,
+    model_path: Path | None = None,
 ) -> list[Path]:
     """Build wiki pages from .mmd files + RIG. Returns generated file paths."""
     mmd_files = sorted(mmd_dir.glob("*.mmd"))
@@ -230,6 +231,22 @@ def build_pages(
     arch_path.write_text("\n".join(arch_lines) + "\n", encoding="utf-8")
     generated.append(arch_path)
 
+    # ── C4-Model.md — the full LikeC4 model as a wiki page ───────────
+    # Agents and the llm-wiki skill read this for component descriptions,
+    # doc comments, and exported API surface. It's the semantic view.
+    if model_path and model_path.exists():
+        model_text = model_path.read_text(encoding="utf-8")
+        model_page = output_dir / "C4-Model.md"
+        model_page.write_text(
+            f"# C4 Model — {project_name}\n\n"
+            f"> The full LikeC4 model, generated deterministically from the RIG.\n"
+            f"> Every component description, doc comment, and export is derived\n"
+            f"> from the source code — nothing invented.\n\n"
+            f"```likec4\n{model_text}\n```\n",
+            encoding="utf-8",
+        )
+        generated.append(model_page)
+
     print(
         f"[build-wiki-pages] Generated {len(generated)} page(s): "
         f"Architecture.md"
@@ -247,13 +264,14 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("wiki-out"))
     parser.add_argument("--project-name", default="Project")
     parser.add_argument("--rig-file", type=Path, default=None, help="RIG JSON for source map")
+    parser.add_argument("--model-file", type=Path, default=None, help="model.c4 for C4-Model.md wiki page")
     args = parser.parse_args()
 
     if not args.mmd_dir.is_dir():
         print(f"Error: {args.mmd_dir} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    pages = build_pages(args.mmd_dir, args.output_dir, args.project_name, args.rig_file)
+    pages = build_pages(args.mmd_dir, args.output_dir, args.project_name, args.rig_file, args.model_file)
     if not pages:
         sys.exit(1)
 

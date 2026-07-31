@@ -94,6 +94,7 @@ log "cleaning up previous generated files…"
 rm -rf "$WIKI_DIR/Components"  # old format (subdirectory — caused 500)
 rm -f "$WIKI_DIR"/Component---*.md  # current format (flat)
 rm -f "$WIKI_DIR/Architecture.md"
+rm -f "$WIKI_DIR/C4-Model.md"
 rm -rf "$WIKI_DIR/raw"  # artifacts now live in the main repo
 
 log "syncing pages from $PAGES_DIR…"

@@ -107,11 +107,8 @@ log "Step 4/4: Building wiki pages…"
 python3 "$TOOLS_DIR/build-wiki-pages.py" "$MMD_DIR" \
     --output-dir "$OUTPUT_DIR/wiki" \
     --project-name "$PROJECT_NAME" \
-    --rig-file "$RIG_FILE"
-
-# Raw artifacts (rig.json, model.c4) are NOT copied to the wiki — Forgejo
-# wiki only renders .md files. They're pushed to the main repo by the
-# CI workflow at .arch-artifacts/.
+    --rig-file "$RIG_FILE" \
+    --model-file "$MODEL_FILE"
 
 log "Done. Output: $OUTPUT_DIR"
 log "  Wiki pages: $OUTPUT_DIR/wiki/"
