@@ -113,10 +113,20 @@ Codeberg, and Forgejo wikis.
 2. **C4 model generation** — `rig-to-c4.py` derives a LikeC4 `model.c4`
    from the RIG, extracting doc comments (`//`, `//!`, `/* */`, docstrings)
    and exported API surface (function/type signatures) from source files.
-3. **Mermaid export** — `likec4 gen mermaid` converts each C4 view into a
-   standalone `.mmd` diagram.
+3. **Mermaid export** — `likec4 gen mermaid --use-dot` converts each C4 view
+   into a standalone `.mmd` diagram.
 4. **Wiki page assembly** — `build-wiki-pages.py` wraps the Mermaid in
    markdown pages that render natively.
 
 No LLM is involved. The output is deterministic: the same source always
 produces the same diagrams.
+
+## Docker/CI requirements
+
+When running inside Docker containers (Forgejo/GitHub Actions runners):
+
+- **Node.js >= 22** — likec4 requires Node 22+. If your CI image ships an
+  older version, upgrade in-container: `npm install -g n && n 22`
+- **graphviz** — likec4's WASM layout engine crashes inside Docker containers.
+  Install graphviz (`apt-get install -y graphviz`) and the script automatically
+  uses `--use-dot` as the layout engine, falling back to WASM if dot is absent.
