@@ -1,7 +1,9 @@
 # Architecture Graph Action (C4)
 
 Generate C4 architecture diagrams from source code and push them to the
-project's own wiki — **no LLM, no k8s, no external infrastructure.**
+project's own wiki — **no LLM, no k8s, no PAT.** The CI's built-in token
+(`GITHUB_TOKEN`, auto-provided on all platforms) already has access to the
+wiki repo — it's the same project, just `<repo>.wiki.git`.
 
 The pipeline is fully deterministic:
 
@@ -14,50 +16,48 @@ extracted into a single action that any project's own CI can use.
 
 ## Quick Start (GitHub)
 
-1. **Initialize the wiki** — go to your repo → Wiki tab → create the first
-   page (any content). This provisions the `<repo>.wiki.git` repository.
-
-2. **Create a token** — GitHub → Settings → Developer settings → Personal
-   access tokens → fine-grained tokens → create one with **Contents: Read
-   and Write** for your repo. Add it as a repository secret named
-   `WIKI_TOKEN`.
-
-3. **Add the workflow** to `.github/workflows/arch.yml`:
+**One prerequisite:** initialize the wiki — go to your repo → Wiki tab →
+create the first page (any content). This provisions the `<repo>.wiki.git`
+repository.
 
 ```yaml
+# .github/workflows/arch.yml
 name: Architecture Diagrams
 on:
   push:
     branches: [main]
 
+permissions:
+  contents: write        # gives GITHUB_TOKEN write access to the wiki
+
 jobs:
   arch:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: tibrezus/llm-wiki/.github/actions/arch-graph@main
         with:
           language: go          # optional: go, zig, python, rust, ...
-          wiki-token: ${{ secrets.WIKI_TOKEN }}
 ```
 
-That's it. On every push to `main`, the action generates the C4 diagrams
-and pushes them to your wiki. The diagrams render natively on GitHub wiki.
+No secrets to create, no tokens to manage. The `GITHUB_TOKEN` is
+auto-provided by GitHub Actions and has access to the wiki repo.
 
 ## Quick Start (Codeberg / Forgejo)
 
-Codeberg/Forgejo runners can't reference GitHub actions directly. Use a
-manual workflow instead:
+Same principle — the CI token already has wiki access. Use a manual
+workflow since Codeberg/Forgejo runners can't reference GitHub actions
+directly:
 
 ```yaml
 # .forgejo/workflows/arch.yml  (Codeberg)
-# .gitea/workflows/arch.yml     (Gitea)
 name: Architecture Diagrams
 on:
   push:
     branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   arch:
@@ -76,17 +76,12 @@ jobs:
             --output-dir arch-out
 
       - name: Push to wiki
-        env:
-          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
         run: |
           bash /tmp/tools/.github/actions/repo-map/push-to-wiki.sh arch-out/wiki
 ```
 
-For Codeberg, create a token with `write:repository` scope and add it as
-the `WIKI_TOKEN` secret.
-
-> **Private repos on git.rezus.cloud runners:** if the runner can't reach
-> GitHub, point the tools clone at the Forgejo mirror:
+> **git.rezus.cloud runners** that can't reach GitHub: point the tools
+> clone at the Forgejo mirror:
 > `https://git.rezus.cloud/tibrez/llm-wiki-template.git`
 
 ## What it produces
@@ -106,7 +101,6 @@ Codeberg, and Forgejo wikis.
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `language` | no | `""` (auto-detect) | Language hint: go, zig, python, rust, ... |
-| `wiki-token` | **yes** | — | Token with wiki write access |
 | `commit-message` | no | `"Update architecture diagrams [skip ci]"` | Wiki commit message |
 | `tools-version` | no | `main` | llm-wiki module ref (pin for reproducibility) |
 

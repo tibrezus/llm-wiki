@@ -18,7 +18,9 @@ set -euo pipefail
 #   GITHUB_REPOSITORY   CI runner owner/repo (auto)
 
 PAGES_DIR=""
-TOKEN="${WIKI_TOKEN:-}"
+# The CI's built-in token (GITHUB_TOKEN on all platforms) has access to the
+# wiki repo — it's the same project, just <repo>.wiki.git. No PAT needed.
+TOKEN="${GITHUB_TOKEN:-${WIKI_TOKEN:-}}"
 COMMIT_MSG="Update architecture diagrams [skip ci]"
 
 while [[ $# -gt 0 ]]; do
@@ -47,10 +49,11 @@ if [ ! -d "$PAGES_DIR" ]; then
 fi
 
 if [ -z "$TOKEN" ]; then
-    echo "[push-to-wiki] No token provided (set WIKI_TOKEN or pass --token)"
-    echo "  GitHub:       create a PAT with 'repo' scope, add as WIKI_TOKEN secret"
-    echo "  Codeberg:     create a token with 'write:repository' scope"
-    echo "  Forgejo:      create a token with 'write:repository' scope"
+    echo "[push-to-wiki] No GITHUB_TOKEN in environment."
+    echo "  The CI auto-provides GITHUB_TOKEN with 'contents: write' permission."
+    echo "  Ensure your workflow has:"
+    echo "    permissions:"
+    echo "      contents: write"
     exit 1
 fi
 
