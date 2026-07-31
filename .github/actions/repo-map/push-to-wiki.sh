@@ -88,7 +88,14 @@ if ! git clone --depth 1 "$WIKI_URL" "$WIKI_DIR" 2>&1 | tail -1; then
 fi
 
 # Sync generated pages into the wiki repo.
-# Architecture.md goes to the root; Components/ goes to a subdirectory.
+# First, clean up previous generated files (so stale pages from older
+# formats don't accumulate). We only remove patterns we generate.
+log "cleaning up previous generated files…"
+rm -rf "$WIKI_DIR/Components"  # old format (subdirectory — caused 500)
+rm -f "$WIKI_DIR"/Component---*.md  # current format (flat)
+rm -f "$WIKI_DIR/Architecture.md"
+rm -rf "$WIKI_DIR/raw"
+
 log "syncing pages from $PAGES_DIR…"
 cp -r "$PAGES_DIR"/* "$WIKI_DIR/"
 
