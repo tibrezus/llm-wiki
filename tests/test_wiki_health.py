@@ -177,7 +177,9 @@ class TestBidirectional(unittest.TestCase):
 
 class TestStale(unittest.TestCase):
     def test_fresh(self):
-        pages = {"x": make_page("x", "wiki/entities/x.md", frontmatter={"updated": "2026-05-01"})}
+        from datetime import date, timedelta
+        recent = (date.today() - timedelta(days=10)).isoformat()
+        pages = {"x": make_page("x", "wiki/entities/x.md", frontmatter={"updated": recent})}
         self.assertEqual(check_stale(pages, 90), [])
 
     def test_stale(self):

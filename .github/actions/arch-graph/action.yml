@@ -1,0 +1,64 @@
+name: "Architecture Graph (C4)"
+description: >-
+  Generate C4 architecture diagrams from source code (RIG → model.c4 → Mermaid)
+  and push them to the project's own wiki. Fully deterministic — no LLM, no
+  external infrastructure.
+
+inputs:
+  language:
+    description: >-
+      Language hint for the RIG emitter (go, zig, python, rust, ...). If
+      omitted, auto-detects from build files.
+    required: false
+    default: ""
+  wiki-token:
+    description: >-
+      Token with write access to the project wiki. GitHub: a PAT with 'repo'
+      scope (the default GITHUB_TOKEN cannot push to wikis). Codeberg/Forgejo:
+      a token with 'write:repository' scope.
+    required: true
+  commit-message:
+    description: Wiki commit message.
+    required: false
+    default: "Update architecture diagrams [skip ci]"
+  tools-version:
+    description: >-
+      llm-wiki module ref to use for the tools (default: main — always latest).
+    required: false
+    default: "main"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get arch-graph tools
+      uses: actions/checkout@v4
+      with:
+        repository: tibrezus/llm-wiki
+        ref: ${{ inputs.tools-version }}
+        path: _arch-tools
+        sparse-checkout: .github/actions/repo-map
+
+    - name: Install LikeC4
+      shell: bash
+      run: npm install -g @likec4/generator 2>&1 | tail -1
+
+    - name: Generate diagrams (RIG → C4 → Mermaid → wiki pages)
+      shell: bash
+      env:
+        LANGUAGE: ${{ inputs.language }}
+      run: |
+        TOOLS="_arch-tools/.github/actions/repo-map"
+        bash "$TOOLS/arch-graph.sh" \
+          --tools-dir "$TOOLS" \
+          --language "$LANGUAGE" \
+          --output-dir arch-out
+
+    - name: Push to project wiki
+      shell: bash
+      env:
+        WIKI_TOKEN: ${{ inputs.wiki-token }}
+        COMMIT_MSG: ${{ inputs.commit-message }}
+      run: |
+        TOOLS="_arch-tools/.github/actions/repo-map"
+        bash "$TOOLS/push-to-wiki.sh" arch-out/wiki \
+          --commit-message "$COMMIT_MSG"
