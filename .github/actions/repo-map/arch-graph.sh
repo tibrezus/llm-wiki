@@ -93,8 +93,13 @@ if ! command -v likec4 &>/dev/null; then
     log "  likec4 not found — installing…"
     npm install -g likec4 2>&1 | tail -1
 fi
-likec4 gen mermaid -o "$MMD_DIR" "$OUTPUT_DIR" 2>&1 | tail -3
+likec4 gen mermaid --use-dot -o "$MMD_DIR" "$OUTPUT_DIR" 2>&1 | tail -5
 MMD_COUNT=$(find "$MMD_DIR" -maxdepth 1 -name '*.mmd' | wc -l)
+if [ "$MMD_COUNT" -eq 0 ]; then
+    log "WARN: --use-dot produced 0 diagrams — retrying with WASM layout engine…"
+    likec4 gen mermaid -o "$MMD_DIR" "$OUTPUT_DIR" 2>&1 | tail -5
+    MMD_COUNT=$(find "$MMD_DIR" -maxdepth 1 -name '*.mmd' | wc -l)
+fi
 log "  Mermaid: $MMD_COUNT diagram(s)"
 
 # ── Step 4: Build wiki pages ──────────────────────────────────────────
