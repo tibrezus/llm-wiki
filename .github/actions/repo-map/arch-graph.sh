@@ -109,11 +109,9 @@ python3 "$TOOLS_DIR/build-wiki-pages.py" "$MMD_DIR" \
     --project-name "$PROJECT_NAME" \
     --rig-file "$RIG_FILE"
 
-# Copy raw artifacts to the wiki output so they're accessible alongside
-# the rendered pages (the wiki is self-contained).
-mkdir -p "$OUTPUT_DIR/wiki/raw"
-cp "$RIG_FILE" "$OUTPUT_DIR/wiki/raw/rig.json" 2>/dev/null || true
-cp "$MODEL_FILE" "$OUTPUT_DIR/wiki/raw/model.c4" 2>/dev/null || true
+# Raw artifacts (rig.json, model.c4) are NOT copied to the wiki — Forgejo
+# wiki only renders .md files. They're pushed to the main repo by the
+# CI workflow at .arch-artifacts/.
 
 log "Done. Output: $OUTPUT_DIR"
 log "  Wiki pages: $OUTPUT_DIR/wiki/"
