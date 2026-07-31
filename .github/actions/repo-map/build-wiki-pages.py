@@ -61,6 +61,7 @@ def build_pages(mmd_dir: Path, output_dir: Path, project_name: str) -> list[Path
 
     context_body: str | None = None
     container_body: str | None = None
+    structure_body: str | None = None
     component_pages: list[tuple[str, str, str]] = []  # (slug, title, body)
     index_count = 0
 
@@ -75,7 +76,9 @@ def build_pages(mmd_dir: Path, output_dir: Path, project_name: str) -> list[Path
         # Classify by view type
         stem = mmd.stem.lower()
         tl = (title or "").lower()
-        if stem == "context" or "context" in tl:
+        if stem == "structure" or "repository structure" in tl:
+            structure_body = body
+        elif stem == "context" or "context" in tl:
             context_body = body
         elif stem == "containers" or "containers" in tl:
             container_body = body
@@ -98,10 +101,18 @@ def build_pages(mmd_dir: Path, output_dir: Path, project_name: str) -> list[Path
 
     has_components = bool(component_pages)
 
-    if context_body:
-        arch_lines += ["## System Context", "", "```mermaid", context_body, "```", ""]
-    if container_body:
-        arch_lines += ["## Containers", "", "```mermaid", container_body, "```", ""]
+    # Determine the overview diagram(s) to show.
+    # Prefer the new single "structure" view. Fall back to legacy
+    # context/container views, but deduplicate (they're often identical).
+    if structure_body:
+        arch_lines += ["## Repository Structure", "", "```mermaid", structure_body, "```", ""]
+    else:
+        # Legacy format: context + container views. Only show container if
+        # it differs from context (they're identical in build-system models).
+        if context_body:
+            arch_lines += ["## System Context", "", "```mermaid", context_body, "```", ""]
+        if container_body and container_body != context_body:
+            arch_lines += ["## Containers", "", "```mermaid", container_body, "```", ""]
 
     if has_components:
         arch_lines += [

@@ -478,16 +478,12 @@ def generate_c4(rig: dict, source_dir: Path | None) -> str:
     lines.append("views {")
     all_container_ids = [c4_ids[c["id"]] for c in components]
 
-    # Context view
-    lines.append(f"  view context of {sys_ident} {{")
-    lines.append(f"    title '{repo.get('name', 'System')} — System Context'")
-    lines.append("    include *")
-    lines.append("  }")
-    lines.append("")
-
-    # Container view
-    lines.append(f"  view containers of {sys_ident} {{")
-    lines.append(f"    title '{repo.get('name', 'System')} — Containers'")
+    # Structure view — the complete component graph (all build targets +
+    # their dependencies). For a build-system RIG there is no real
+    # context/container hierarchy — all components are peers — so a single
+    # overview view is more useful than two identical context/container views.
+    lines.append(f"  view structure of {sys_ident} {{")
+    lines.append(f"    title '{repo.get('name', 'System')} — Repository Structure'")
     lines.append("    include *")
     lines.append("  }")
     lines.append("")
