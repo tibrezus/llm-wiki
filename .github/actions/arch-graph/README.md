@@ -70,7 +70,7 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse \
             https://github.com/tibrezus/llm-wiki.git /tmp/tools
           cd /tmp/tools && git sparse-checkout set .github/actions/repo-map
-          npm install -g @likec4/generator
+          npm install -g likec4
           bash /tmp/tools/.github/actions/repo-map/arch-graph.sh \
             --tools-dir /tmp/tools/.github/actions/repo-map \
             --output-dir arch-out

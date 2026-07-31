@@ -91,7 +91,7 @@ log "Step 3/4: Generating Mermaid diagrams (likec4 gen mermaid)…"
 MMD_DIR="$OUTPUT_DIR"
 if ! command -v likec4 &>/dev/null; then
     log "  likec4 not found — installing…"
-    npm install -g @likec4/generator 2>&1 | tail -1
+    npm install -g likec4 2>&1 | tail -1
 fi
 likec4 gen mermaid -o "$MMD_DIR" "$OUTPUT_DIR" 2>&1 | tail -3
 MMD_COUNT=$(find "$MMD_DIR" -maxdepth 1 -name '*.mmd' | wc -l)

@@ -34,7 +34,7 @@ runs:
 
     - name: Install LikeC4
       shell: bash
-      run: npm install -g @likec4/generator 2>&1 | tail -1
+      run: npm install -g likec4 2>&1 | tail -1
 
     - name: Generate diagrams (RIG → C4 → Mermaid → wiki pages)
       shell: bash
