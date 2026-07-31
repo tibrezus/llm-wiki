@@ -66,8 +66,13 @@ SERVER="${GITHUB_SERVER_URL:-https://github.com}"
 SERVER_HOST="${SERVER#https://}"
 
 # Construct the wiki clone URL with token auth.
-# x-access-token:<token> works on GitHub; Forgejo/Codeberg accept it too.
-WIKI_URL="https://x-access-token:${TOKEN}@${SERVER_HOST}/${GITHUB_REPOSITORY}.wiki.git"
+# GitHub uses x-access-token:<token>; Forgejo/Codeberg use oauth2:<token>.
+if [[ "$SERVER_HOST" == "github.com" ]]; then
+    AUTH="x-access-token:${TOKEN}"
+else
+    AUTH="oauth2:${TOKEN}"
+fi
+WIKI_URL="https://${AUTH}@${SERVER_HOST}/${GITHUB_REPOSITORY}.wiki.git"
 
 log() { echo "[push-to-wiki] $*"; }
 
